@@ -1,0 +1,18 @@
+RESULT 1 --- three-window decay, Chen-Zimmermann universe
+========================================================================
+signals used                      : 189
+months                            : 1926-01 to 2024-12
+signal-month observations         : 173,302
+
+Equal-weighted across signals, mean monthly long-short return (%/month):
+  1. in the paper's own sample     :  0.603
+  2. post-sample, pre-publication  :  0.437   (-28% vs window 1)
+  3. post-publication              :  0.329   (-45% vs window 1)
+
+Panel regression, signal fixed effects, SEs clustered by date:
+  post-sample   -0.1449 %/month   (t = -1.94)
+  post-publication -0.2718 %/month   (t = -5.12)
+  implied decline vs in-sample mean: -24% and -45%
+
+McLean and Pontiff (2016): about -26% post-sample and -58% post-publication,
+over 97 anomalies. Differences come from universe, sample end, and weighting.
