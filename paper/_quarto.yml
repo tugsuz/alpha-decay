@@ -22,8 +22,13 @@ format:
     df-print: kable
     link-external-newwindow: true
     embed-resources: true
+    # Quarto's automatic "Other Formats" box links to a PDF sitting next to the page.
+    # The link is written whether or not that file was published, so it is off; the
+    # opening callout links the PDF by hand and publish.sh guarantees it is there.
+    format-links: false
   pdf:
     documentclass: article
+    pdf-engine: xelatex        # the author's name has a ğ in it
     papersize: letter
     geometry:
       - margin=1in

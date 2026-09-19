@@ -13,6 +13,8 @@ to the end of the current data.
 
 > ### 📄 Read the paper: **<https://tugsuz.github.io/alpha-decay/>**
 >
+> ([PDF](https://tugsuz.github.io/alpha-decay/alpha-decay.pdf))
+>
 > The question, the estimand, the estimator derived in LaTeX, the code that implements
 > it, the number, and the test the number has to survive — maths and code interleaved,
 > the way the work was actually done. Source: [`paper/alpha-decay.qmd`](paper/alpha-decay.qmd);

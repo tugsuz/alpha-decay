@@ -22,9 +22,9 @@ computed by a code chunk below or read out of a committed result file; none is t
 hand. The order is deliberate: the question, then the estimand, then the estimator
 written out, then the number, then the test that the number survives.
 
-Source: [`github.com/tugsuz/alpha-decay`](https://github.com/tugsuz/alpha-decay).
-Sections @sec-question through @sec-restriction need only the free Chen–Zimmermann
-files; @sec-rebuild reads committed results and needs nothing at all.
+Source: [`github.com/tugsuz/alpha-decay`](https://github.com/tugsuz/alpha-decay) ·
+[PDF](alpha-decay.pdf). Sections @sec-question through @sec-restriction need only the free
+Chen–Zimmermann files; @sec-rebuild reads committed results and needs nothing at all.
 :::
 
 ```{python}
