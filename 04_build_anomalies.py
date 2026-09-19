@@ -92,6 +92,19 @@ def add_month_index(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def ym(mi) -> tuple[int, int]:
+    """Invert mi = year*12 + month back to (year, month).
+
+    Month runs 1..12, so December has mi % 12 == 0 and mi // 12 == year + 1. Decoding
+    with (mi // 12, mi % 12 or 12) is therefore right eleven months out of twelve and
+    puts every December in the following year -- which is how an earlier version of this
+    script reported the overlap window as ending 2025-12 when Chen-Zimmermann ends
+    2024-12. divmod on mi - 1 has no such seam.
+    """
+    y, m = divmod(int(mi) - 1, 12)
+    return y, m + 1
+
+
 def signal_size(df: pd.DataFrame) -> pd.Series:
     """Log market value of equity. SignalDoc: 'Log of monthly market value of equity'.
 
@@ -306,7 +319,7 @@ def main() -> None:
                     f"  {corrs[0]:7.3f}   {bl:+d}        {gap:+.3f}")
                 scored.append((abs(gap), corrs[0], bl, label))
             if lo is not None:
-                add(f"      overlap window: {lo//12}-{lo%12 or 12:02d} to {hi//12}-{hi%12 or 12:02d}")
+                add("      overlap window: %d-%02d to %d-%02d" % (*ym(lo), *ym(hi)))
             add("")
             if scored:
                 scored.sort()
@@ -333,7 +346,7 @@ def main() -> None:
                 best_label = label
                 best_series = dict(variants)[best_label]
                 o = base.join(best_series.rename("mine"), how="inner").dropna()
-                o = o.assign(decade=(o.index // 12 // 10) * 10)
+                o = o.assign(decade=[(ym(m)[0] // 10) * 10 for m in o.index])
                 dec = o.groupby("decade").agg(
                     months=("mine", "size"), mine=("mine", "mean"), theirs=("theirs", "mean"))
                 dec["gap"] = dec["mine"] - dec["theirs"]
@@ -342,8 +355,8 @@ def main() -> None:
                 add("      decade   months    mine   theirs     gap")
                 for d, r in dec.iterrows():
                     add(f"      {int(d)}s    {int(r['months']):5d}  {r['mine']:6.3f}  {r['theirs']:6.3f}  {r['gap']:+7.3f}")
-                pre = o[o.index // 12 < 1963]
-                post = o[o.index // 12 >= 1963]
+                yr = np.array([ym(m)[0] for m in o.index])
+                pre, post = o[yr < 1963], o[yr >= 1963]
                 for tag, part in (("pre-1963 (CRSP is NYSE-only)", pre), ("1963 onward", post)):
                     if len(part) > 24:
                         add(f"      {tag:<32} n={len(part):4d}  mine {part['mine'].mean():6.3f}"
@@ -365,7 +378,7 @@ def main() -> None:
         ov = b.dropna(subset=["mine", "theirs"])
         if ov.empty:
             continue
-        x = pd.to_datetime([f"{m//12}-{(m%12) or 12:02d}-01" for m in ov.index])
+        x = pd.to_datetime(["%d-%02d-01" % ym(m) for m in ov.index])
         ax.plot(x, (1 + ov["mine"] / 100).cumprod(), label="rebuilt from CRSP", lw=1.4, color="#333333")
         ax.plot(x, (1 + ov["theirs"] / 100).cumprod(), label="Chen-Zimmermann", lw=1.4,
                 color="#bbbbbb", ls="--")

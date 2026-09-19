@@ -1,0 +1,49 @@
+project:
+  type: default
+  output-dir: _output
+
+# Rendered artefacts are regenerated from the .qmd; only the source is committed.
+# `quarto render` writes into paper/_output/, which .gitignore excludes.
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    toc-title: Contents
+    number-sections: true
+    code-fold: show
+    code-summary: "code"
+    code-tools: true
+    code-line-numbers: false
+    fig-width: 7.5
+    fig-height: 4.2
+    fig-dpi: 160
+    df-print: kable
+    link-external-newwindow: true
+    embed-resources: true
+  pdf:
+    documentclass: article
+    papersize: letter
+    geometry:
+      - margin=1in
+    number-sections: true
+    colorlinks: true
+    fig-width: 6.5
+    fig-height: 3.8
+    code-line-numbers: false
+    keep-tex: false
+
+bibliography: references.bib
+csl: null
+citeproc: true
+
+execute:
+  echo: true
+  warning: false
+  message: false
+  freeze: auto
+  cache: false
+
+knitr: null
+jupyter: python3

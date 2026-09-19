@@ -20,3 +20,10 @@ output/*
 
 # Script backups
 *.bak_*
+
+# Quarto build products. The .qmd is the source; the rendered HTML/PDF and the
+# generated notebook are not committed.
+paper/_output/
+paper/.quarto/
+paper/*.ipynb
+.quarto/

@@ -1,0 +1,884 @@
+---
+title: "The Half-Life of a Market Edge"
+subtitle: "Post-publication alpha decay across 189 equity anomalies, 1926–2024"
+author: "Mehmet Tuğsuz"
+date: today
+abstract: |
+  Several hundred cross-sectional return predictors have been published since the 1980s.
+  If they are compensation for risk, publication should not change them; if they are
+  mispricing, publication is the moment enough capital learns about them to trade them
+  away. Across the 189 usable signals in the Chen–Zimmermann universe (1926–2024,
+  173,302 signal-months) the mean monthly long-short return falls 45% after publication
+  and the median signal loses 53%, updating McLean and Pontiff (2016). The paper then
+  tests, rather than asserts, the restriction that separates the arbitrage channel from
+  the data-mining channel, and fails to reject equality — so the three-window design
+  does not identify the channel on this universe. Two of the input series are rebuilt
+  from raw CRSP as a check on the whole exercise.
+---
+
+::: {.callout-note appearance="simple"}
+**This document is the project, not a summary of it.** Every number in the prose is
+computed by a code chunk below or read out of a committed result file; none is typed by
+hand. The order is deliberate: the question, then the estimand, then the estimator
+written out, then the number, then the test that the number survives.
+
+Source: [`github.com/tugsuz/alpha-decay`](https://github.com/tugsuz/alpha-decay).
+Sections @sec-question through @sec-restriction need only the free Chen–Zimmermann
+files;
+@sec-rebuild reads committed results and needs nothing at all.
+:::
+
+```{python}
+#| label: setup
+#| code-fold: true
+#| code-summary: "setup: paths, plotting defaults, helpers"
+
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from IPython.display import Markdown
+
+ROOT = Path.cwd().parent if Path.cwd().name == "paper" else Path.cwd()
+DATA, OUT = ROOT / "data", ROOT / "output"
+
+HAVE_CZ = (DATA / "PredictorLSretWide.csv").exists() and (DATA / "SignalDoc.csv").exists()
+
+# Two categorical hues, validated for colour-vision deficiency against a light surface
+# (worst-pair CVD ΔE 9.2, normal-vision ΔE 24.0). Identity is never carried by colour
+# alone: every two-series figure also gets a legend and direct end labels.
+BLUE, ORANGE = "#2a78d6", "#eb6834"
+INK, MUTED, GRID = "#0b0b0b", "#52514e", "#d9d9d6"
+
+mpl.rcParams.update({
+    "figure.facecolor": "white", "axes.facecolor": "white",
+    "axes.edgecolor": MUTED, "axes.labelcolor": INK, "text.color": INK,
+    "xtick.color": MUTED, "ytick.color": MUTED,
+    "axes.spines.top": False, "axes.spines.right": False,
+    "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.6,
+    "font.size": 9.5, "axes.titlesize": 10.5, "axes.titlelocation": "left",
+    "legend.frameon": False, "figure.dpi": 160,
+})
+
+def ym(mi):
+    """Invert mi = year*12 + month.
+
+    Month runs 1..12, so December has mi % 12 == 0 and mi // 12 == year + 1. Decoding
+    with (mi // 12, mi % 12 or 12) is right eleven months out of twelve and files every
+    December under the following year. divmod on mi - 1 has no such seam.
+    """
+    y, m = divmod(int(mi) - 1, 12)
+    return y, m + 1
+
+def mi_to_ts(idx):
+    return pd.to_datetime([f"{y}-{m:02d}-01" for y, m in map(ym, idx)])
+
+import matplotlib.patheffects as pe
+HALO = [pe.withStroke(linewidth=2.6, foreground="white")]   # keeps labels legible on marks
+
+def fmt(x, d=3):
+    return f"{x:,.{d}f}"
+```
+
+# The question {#sec-question}
+
+A cross-sectional return predictor is a rule that sorts stocks on some characteristic
+and goes long one end and short the other. Several hundred have been documented since
+@banz1981, enough that @harvey2016 argue the conventional *t*-statistic hurdle of 2.0 is
+far too low for a literature that has run this many tests, and @hou2020 find that a
+majority do not survive careful replication.
+
+That is a statement about the *past* of a signal. This project is about its *future*.
+Take a predictor that was real in its original sample and ask what happens to it after
+the paper appears. Two stories predict opposite things.
+
+**Arbitrage.** The edge was mispricing. Publication makes it common knowledge, capital
+arrives, the mispricing is traded away. @mclean2016 call this the out-of-sample
+publication effect, and it is the mechanism in @shleifer1997: the edge shrinks, but not
+necessarily to zero, because @grossman1980 requires a positive residual return to pay
+for the arbitrage in the first place. A market in which every published edge went to
+exactly zero would be one in which nobody was paid to look, and the edges would return.
+
+**Data mining.** The edge was never there. The original sample was lucky — selected, over
+fitted, or the survivor of a search across many candidate characteristics that were never
+reported. Then the edge does not wait for publication to disappear; it is already gone
+the moment you step outside the sample the author chose.
+
+Both predict decay. They differ in *when*, and that is what makes the design in
+@sec-design a test rather than a description.
+
+# Data {#sec-data}
+
+## The anomaly universe
+
+@chen2022 reimplement several hundred published predictors from their original papers and
+publish the resulting long-short portfolio return series together with a documentation
+file recording, for each signal, the authors, the journal, the publication year, the
+original sample window and the implementation parameters. Two files are used here, both
+free:
+
+| File | What it holds |
+|---|---|
+| `PredictorLSretWide.csv` | monthly long-short returns, one column per signal |
+| `SignalDoc.csv` | one row per signal: acronym, journal, `Year`, `SampleStartYear`, `SampleEndYear`, plus `Sign`, `Stock Weight`, `LS Quantile`, `Portfolio Period` |
+
+**Release: October 2025, v2.0.0.** Most series run through December 2024;
+option-implied-volatility predictors end December 2022. This is the first release
+produced by the authors' Python translation rather than the original Stata code, and
+`ChNAnalyst`, `PriceDelayTstat` and `Recomm_ShortInterest` carry revisions from bug fixes
+in that translation. All three are in the universe below.
+
+```{python}
+#| label: load
+#| code-fold: true
+#| code-summary: "load the two Chen–Zimmermann files"
+
+if not HAVE_CZ:
+    raise SystemExit(
+        "data/PredictorLSretWide.csv and data/SignalDoc.csv are missing.\n"
+        "Both are free from https://www.openassetpricing.com (Data tab). "
+        "Put them in data/ and render again."
+    )
+
+rets = pd.read_csv(DATA / "PredictorLSretWide.csv")
+rets = rets.rename(columns={rets.columns[0]: "date"})
+rets["date"] = pd.to_datetime(rets["date"])
+doc = pd.read_csv(DATA / "SignalDoc.csv")
+```
+
+## Which signals enter, and why
+
+Three filters, each of which changes the answer and therefore belongs in the text rather
+than in a footnote.
+
+1. **Predictors only.** The authors label some series as placebos — characteristics their
+   own replication finds do not predict. Averaging those in would drag every window
+   towards zero and flatter the decay.
+2. **The paper's sample must end strictly before the paper appears.** If it does not,
+   window 2 below has no months in it and the three-window design collapses to two.
+3. **At least 24 monthly observations in *every* window.** Otherwise a signal can enter
+   the post-publication average on the strength of three observations.
+
+The third filter is what makes the headline comparison honest: the *same* signals appear
+in all three windows, so the decline cannot be an artefact of the composition changing
+between them.
+
+```{python}
+#| label: panel
+#| code-fold: false
+
+MIN_MONTHS = 24
+
+d = doc[doc["Cat.Signal"] == "Predictor"].dropna(subset=["Year", "SampleEndYear"])
+d = d[d["SampleEndYear"] < d["Year"]]                       # filter 2
+
+usable = [c for c in rets.columns if c != "date" and c in set(d["Acronym"])]
+long = (rets[["date"] + usable]
+        .melt(id_vars="date", var_name="signal", value_name="ret")
+        .dropna(subset=["ret"]))
+
+meta = d.set_index("Acronym")[["Year", "SampleEndYear"]]
+long["pub_year"] = long["signal"].map(meta["Year"]).astype(int)
+long["samp_end"] = long["signal"].map(meta["SampleEndYear"]).astype(int)
+long["year"] = long["date"].dt.year
+
+long["window"] = np.select(
+    [long["year"] <= long["samp_end"],
+     (long["year"] > long["samp_end"]) & (long["year"] < long["pub_year"])],
+    ["1_in_sample", "2_post_sample"],
+    default="3_post_pub",
+)
+```
+
+```{python}
+#| label: matched
+#| code-fold: false
+
+g = long.groupby(["signal", "window"])["ret"].agg(["mean", "size"]).unstack("window")
+complete = (g["size"].fillna(0) >= MIN_MONTHS).all(axis=1)      # filter 3
+table = g["mean"][complete].dropna()
+table.columns = [c.split("_", 1)[1] for c in table.columns]
+
+N_MATCHED = len(table)
+N_PANEL   = long["signal"].nunique()
+N_OBS     = len(long)
+N_DATES   = long["date"].nunique()
+```
+
+The panel used for the regression holds `{python} N_PANEL` signals and
+`{python} f"{N_OBS:,}"` signal-months over
+`{python} f"{long['date'].min():%Y-%m}"` to `{python} f"{long['date'].max():%Y-%m}"`,
+across `{python} f"{N_DATES:,}"` distinct months. The matched table holds the
+`{python} N_MATCHED` signals that clear all three filters.
+
+# Design: three windows {#sec-design}
+
+Cut each signal's history at two dates taken from its own paper:
+
+| Window | Definition | What it is |
+|---|---|---|
+| 1. in-sample | year ≤ `SampleEndYear` | the edge as originally reported |
+| 2. post-sample | `SampleEndYear` < year < `Year` | discovered, not yet public |
+| 3. post-publication | year ≥ `Year` | public, and being traded on |
+
+Window 2 is the whole design. Under the arbitrage story nothing happens until the paper
+appears, so window 2 should look like window 1 and only window 3 falls. Under the
+data-mining story window 2 is *already* lower, because stepping outside the author's
+chosen sample is enough.
+
+Write the estimand as a within-signal comparison of means. For signal $i$ let
+$\mu_i^{(w)}$ be its mean long-short return in window $w$. Then
+
+$$
+\delta_1 \;=\; \mathbb{E}_i\!\left[\mu_i^{(2)} - \mu_i^{(1)}\right],
+\qquad
+\delta_2 \;=\; \mathbb{E}_i\!\left[\mu_i^{(3)} - \mu_i^{(1)}\right] ,
+$$
+
+and the quantity the two stories disagree about is the **increment**
+$\delta_2 - \delta_1$: the part of the fall that arrives with publication rather than
+with the end of the sample. Arbitrage predicts $\delta_1 \approx 0$ and
+$\delta_2 - \delta_1 < 0$. Pure data mining predicts $\delta_1 < 0$ and
+$\delta_2 - \delta_1 \approx 0$.
+
+::: {.callout-important appearance="simple"}
+**What this design assumes.** $\delta_1$ and $\delta_2$ are causal effects of publication
+only if the publication date is as good as randomly timed with respect to a signal's own
+return path. That is not obviously true: authors submit when a result looks good, and
+journals publish with a lag that is itself correlated with how strong the result is. The
+design is therefore best read as an *event study with a pre-period*, not as a clean
+experiment. @sec-next says what would tighten it.
+:::
+
+# The estimator {#sec-estimator}
+
+## The regression
+
+$$
+r_{it} \;=\; \alpha_i \;+\; \beta_1 D^{\mathrm{post\text{-}sample}}_{it}
+           \;+\; \beta_2 D^{\mathrm{post\text{-}pub}}_{it} \;+\; \varepsilon_{it}
+$$ {#eq-main}
+
+where $r_{it}$ is signal $i$'s long-short return in month $t$ in percent per month, the
+two $D$ variables are the window indicators, and window 1 is the omitted category — so
+$\beta_1$ and $\beta_2$ are read against the in-sample mean. The signal fixed effect
+$\alpha_i$ is what makes this a *within* comparison: without it, $\beta_2$ would partly
+reflect the fact that signals published long ago are different signals from those
+published recently.
+
+## Absorbing the fixed effects
+
+Rather than build `{python} N_PANEL` dummy columns, subtract each signal's own mean from
+every variable:
+
+$$
+\tilde z_{it} \;=\; z_{it} - \bar z_i ,
+\qquad \bar z_i = \frac{1}{T_i}\sum_{t \in \mathcal{T}_i} z_{it} .
+$$
+
+By the Frisch–Waugh–Lovell theorem [@frisch1933; @lovell1963], regressing $\tilde r$ on
+$\tilde D$ returns *numerically the same* $\hat\beta$ as the full dummy regression. This
+is not an approximation and not a shortcut for speed alone: it is the statement that
+$\beta$ is identified from variation over time within a signal.
+
+## Clustering, and why by date
+
+Two long-short portfolios in the same month are not independent draws. They are built
+from the same stocks in the same market, so a month in which value and momentum both do
+badly moves many of them at once. Clustering by **date** allows arbitrary correlation
+within a month; clustering by signal would allow arbitrary correlation within a signal
+across time, which is the wrong axis here [@petersen2009]. With
+`{python} f"{N_DATES:,}"` months the cluster count is comfortably large, which matters
+because cluster-robust inference is asymptotic in the number of clusters, not the number
+of observations [@cameron2015].
+
+Let $g = 1,\dots,G$ index months, $\tilde X_g$ the rows of the demeaned design matrix in
+month $g$ and $\hat u_g$ the residuals there. The sandwich is
+
+$$
+\widehat{\mathrm{Var}}(\hat\beta)
+\;=\;
+c \,\bigl(\tilde X'\tilde X\bigr)^{-1}
+\Bigl[\textstyle\sum_{g=1}^{G} \bigl(\tilde X_g' \hat u_g\bigr)\bigl(\tilde X_g' \hat u_g\bigr)'\Bigr]
+\bigl(\tilde X'\tilde X\bigr)^{-1},
+\qquad
+c \;=\; \frac{G}{G-1}\cdot\frac{n-1}{n-k} .
+$$ {#eq-sandwich}
+
+The bread is the usual $(X'X)^{-1}$; the meat is a sum of **outer products of
+within-cluster score sums**, which is the whole content of clustering — scores are added
+up inside a month before being squared, so correlation inside the month is absorbed
+instead of assumed away. The finite-sample factor $c$ is the standard one. It does not
+subtract the absorbed fixed effects from the degrees of freedom; at
+`{python} f"{N_OBS:,}"` observations that changes the standard errors by about 0.1%.
+
+```{python}
+#| label: estimator
+#| code-fold: false
+
+def within(df, cols, by):
+    """Demean `cols` within groups of `by`. FWL: identical to including group dummies."""
+    return df[cols] - df.groupby(by)[cols].transform("mean")
+
+def cluster_ols(y, X, cluster):
+    """OLS with a cluster-robust covariance matrix, written out rather than imported."""
+    XtX_inv = np.linalg.inv(X.T @ X)
+    beta    = XtX_inv @ (X.T @ y)
+    u       = X * (y - X @ beta)[:, None]
+
+    codes = pd.factorize(cluster)[0]
+    G     = codes.max() + 1
+    meat  = np.zeros((X.shape[1], X.shape[1]))
+    for g in range(G):                       # sum scores inside a cluster, then square
+        s = u[codes == g].sum(axis=0)
+        meat += np.outer(s, s)
+
+    n, k = X.shape
+    c    = (G / (G - 1)) * ((n - 1) / (n - k))
+    V    = c * (XtX_inv @ meat @ XtX_inv)
+    return beta, V, G
+
+def fit(sub):
+    s = sub.copy()
+    s["post_sample"] = (s["window"] == "2_post_sample").astype(float)
+    s["post_pub"]    = (s["window"] == "3_post_pub").astype(float)
+    dm = within(s, ["ret", "post_sample", "post_pub"], "signal")
+    y  = dm["ret"].to_numpy()
+    X  = dm[["post_sample", "post_pub"]].to_numpy()
+    return cluster_ols(y, X, s["date"].to_numpy())
+```
+
+# Result 1: the three windows {#sec-result1}
+
+```{python}
+#| label: result1
+#| code-fold: false
+
+m1, m2, m3 = (table[c].mean() for c in ["in_sample", "post_sample", "post_pub"])
+q1, q2, q3 = (table[c].median() for c in ["in_sample", "post_sample", "post_pub"])
+
+beta_f, V_f, G_f = fit(long)                                   # full panel
+beta_m, V_m, G_m = fit(long[long["signal"].isin(table.index)])  # matched signals only
+se_f, se_m = np.sqrt(np.diag(V_f)), np.sqrt(np.diag(V_m))
+
+n_down = int((table["post_pub"] < table["in_sample"]).sum())
+n_neg  = int((table["post_pub"] < 0).sum())
+n_down2 = int((table["post_sample"] < table["in_sample"]).sum())
+```
+
+```{python}
+#| label: tbl-windows
+#| tbl-cap: "Equal-weighted across the matched signals, mean monthly long-short return."
+#| code-fold: true
+
+Markdown(f"""
+| Window | Mean, %/month | Median, %/month | Mean vs. window 1 |
+|---|---:|---:|---:|
+| 1. in the paper's own sample | {m1:.3f} | {q1:.3f} | — |
+| 2. post-sample, pre-publication | {m2:.3f} | {q2:.3f} | {100*(m2-m1)/abs(m1):+.0f}% |
+| 3. post-publication | **{m3:.3f}** | **{q3:.3f}** | **{100*(m3-m1)/abs(m1):+.0f}%** |
+""")
+```
+
+```{python}
+#| label: fig-windows
+#| fig-cap: "The published edge, before and after publication. Same signals in all three bars."
+#| code-fold: true
+
+fig, ax = plt.subplots(figsize=(6.4, 3.4))
+labels = ["in-sample", "post-sample\npre-publication", "post-publication"]
+vals = [m1, m2, m3]
+bars = ax.bar(labels, vals, color=BLUE, width=0.58, zorder=3)
+for i, (b, v) in enumerate(zip(bars, vals)):     # one series, so one colour throughout
+    ax.text(b.get_x() + b.get_width()/2, v + 0.012, f"{v:.3f}", ha="center", va="bottom",
+            fontsize=9.5, color=INK, fontweight="bold" if i == 2 else "normal")
+ax.set_ylabel("mean long-short return, %/month")
+ax.set_title(f"{N_MATCHED} published equity anomalies, 1926–2024")
+ax.grid(axis="x", visible=False)
+ax.set_ylim(0, max(vals) * 1.18)
+fig.tight_layout()
+plt.show()
+```
+
+The mean falls `{python} f"{abs(100*(m3-m1)/abs(m1)):.0f}"`% and the median
+`{python} f"{abs(100*(q3-q1)/abs(q1)):.0f}"`%. The gap between the two is itself the
+finding: decay is not uniform. A minority of signals survive more or less intact and pull
+the average up, while the typical signal does worse than the average suggests.
+
+```{python}
+#| label: fig-crosssec
+#| fig-cap: "Per-signal change from the in-sample window to the post-publication window. Left of zero is decay."
+#| code-fold: true
+
+chg = (table["post_pub"] - table["in_sample"])
+fig, ax = plt.subplots(figsize=(6.4, 3.2))
+counts, _, _ = ax.hist(chg.clip(-2.5, 2.5), bins=40, color=BLUE, alpha=0.9, zorder=3)
+ax.set_ylim(0, counts.max() * 1.28)                      # headroom for the two labels
+ax.axvline(0, color=INK, lw=1.2, zorder=4)
+ax.axvline(chg.median(), color=ORANGE, lw=2, zorder=5)
+ax.annotate(f"median {chg.median():+.2f}", xy=(chg.median(), counts.max() * 1.20),
+            xytext=(6, 0), textcoords="offset points", ha="left", va="center",
+            color=ORANGE, fontsize=9, path_effects=HALO, zorder=6)
+ax.annotate("no change", xy=(0, counts.max() * 1.06), xytext=(6, 0),
+            textcoords="offset points", ha="left", va="center",
+            color=MUTED, fontsize=8.5, path_effects=HALO, zorder=6)
+ax.set_xlabel("post-publication mean − in-sample mean, %/month")
+ax.set_ylabel("signals")
+ax.set_title("Most signals lose, a few do not")
+ax.grid(axis="x", visible=False)
+fig.tight_layout()
+plt.show()
+```
+
+`{python} n_down` of `{python} N_MATCHED`
+(`{python} f"{100*n_down/N_MATCHED:.0f}"`%) earn less after publication than in sample,
+and `{python} n_neg` (`{python} f"{100*n_neg/N_MATCHED:.0f}"`%) have an outright negative
+mean long-short return once public. `{python} n_down2` were already lower in window 2 —
+the first sign that publication is not the only thing going on.
+
+## The panel regression
+
+```{python}
+#| label: tbl-panel
+#| tbl-cap: "Equation @eq-main, signal fixed effects absorbed by within-demeaning, standard errors clustered by date."
+#| code-fold: true
+
+Markdown(f"""
+| | Full panel ({N_PANEL} signals) | Matched panel ({N_MATCHED}) |
+|---|---:|---:|
+| $\\beta_1$ post-sample | {beta_f[0]:+.4f} (se {se_f[0]:.4f}, t = {beta_f[0]/se_f[0]:.2f}) | {beta_m[0]:+.4f} (se {se_m[0]:.4f}, t = {beta_m[0]/se_m[0]:.2f}) |
+| $\\beta_2$ post-publication | **{beta_f[1]:+.4f}** (se {se_f[1]:.4f}, **t = {beta_f[1]/se_f[1]:.2f}**) | {beta_m[1]:+.4f} (se {se_m[1]:.4f}, t = {beta_m[1]/se_m[1]:.2f}) |
+| implied vs. in-sample mean | {100*beta_f[0]/abs(m1):+.0f}% and {100*beta_f[1]/abs(m1):+.0f}% | {100*beta_m[0]/abs(m1):+.0f}% and {100*beta_m[1]/abs(m1):+.0f}% |
+| clusters (months) | {G_f:,} | {G_m:,} |
+""")
+```
+
+@mclean2016 report roughly −26% post-sample and −58% post-publication over 97 anomalies.
+This universe is about twice as large and includes weaker and less-replicated signals,
+which is the obvious first explanation for the smaller numbers and is testable by
+re-running on their 97.
+
+# What this does *not* show {#sec-restriction}
+
+Read @tbl-panel quickly and the conclusion writes itself: $\beta_2$ is sharply estimated,
+$\beta_1$ is not, therefore publication rather than overfitting is what kills the edge.
+That conclusion does not survive a test.
+
+"Publication matters over and above the end of the sample" is the restriction
+$H_0: \beta_2 = \beta_1$, i.e. $R\beta = 0$ with $R = (-1,\;1)$. The standard error of
+$R\hat\beta$ must come from the **same** clustered covariance matrix, and it is not the
+sum of the two individual standard errors, because $\hat\beta_1$ and $\hat\beta_2$
+covary:
+
+$$
+\mathrm{se}\!\left(\hat\beta_2 - \hat\beta_1\right)
+= \sqrt{R \widehat{\mathrm{Var}}(\hat\beta) R'}
+= \sqrt{\widehat V_{11} + \widehat V_{22} - 2\widehat V_{12}} .
+$$ {#eq-restriction}
+
+Comparing two *t*-statistics — one significant, one not — is not a test of whether the
+coefficients differ. @eq-restriction is.
+
+```{python}
+#| label: restriction
+#| code-fold: false
+
+R = np.array([-1.0, 1.0])
+
+def restriction(beta, V):
+    diff = R @ beta
+    se   = np.sqrt(R @ V @ R)
+    return diff, se, diff / se
+
+diff_f, sed_f, td_f = restriction(beta_f, V_f)
+diff_m, sed_m, td_m = restriction(beta_m, V_m)
+corr_f = V_f[0, 1] / np.sqrt(V_f[0, 0] * V_f[1, 1])
+```
+
+```{python}
+#| label: tbl-restriction
+#| tbl-cap: "Testing $\\beta_2 = \\beta_1$ on the same clustered covariance."
+#| code-fold: true
+
+Markdown(f"""
+| | $\\hat\\beta_2 - \\hat\\beta_1$, %/month | se | t |
+|---|---:|---:|---:|
+| Full panel | {diff_f:+.4f} | {sed_f:.4f} | **{td_f:.2f}** |
+| Matched {N_MATCHED} | {diff_m:+.4f} | {sed_m:.4f} | {td_m:.2f} |
+""")
+```
+
+The incremental effect of publication, over and above the decline that had already
+happened by the time the original sample ended, is **not significant at the 5% level**
+(|t| = `{python} f"{abs(td_f):.2f}"` against a 1.96 critical value). The estimated
+correlation between $\hat\beta_1$ and $\hat\beta_2$ is
+`{python} f"{corr_f:.2f}"`, which is why the difference is less precisely estimated than
+$\hat\beta_2$ alone.
+
+::: {.callout-warning appearance="simple"}
+**The sentence not to write.** "Publication, not overfitting, is what kills the edge."
+The point estimates are consistent with it. The data do not support it at conventional
+levels, and the three-window design as run here does not separate the arbitrage channel
+from the data-mining channel on this universe.
+
+What can be said: the post-publication decline is precisely estimated, the post-sample
+decline is not, and the difference between them is not sharp enough to claim. That is a
+weaker headline and a stronger piece of work, because the restriction was tested rather
+than eyeballed.
+:::
+
+# How much of this rests on someone else's numbers? {#sec-rebuild}
+
+Everything above is computed from 189 return series that somebody else constructed. That
+is a dependency, and an untested one. Two signals are therefore rebuilt from
+security-level CRSP data and scored month by month against the published versions: `Size`,
+about the simplest anomaly there is, and `Mom12m`, which has a formation window, a skip
+month and overlapping holding periods and is therefore easy to get subtly wrong.
+
+The pull (`03_crsp_pull.py`) and the rebuild (`04_build_anomalies.py`) need a WRDS
+subscription. This section does not: it reads the committed result files.
+
+## Portfolio construction, written out
+
+At each formation month $m$ the cross-section is sorted on the signal and cut into
+$n = 1/q$ buckets, where $q$ comes from `SignalDoc` — $q = 0.5$ for `Size` (halves, as in
+@banz1981, who splits the market in two and does not sort deciles) and $q = 0.1$ for
+`Mom12m`. For a bucket $B_m$ and a horizon $h$,
+
+$$
+\bar r^{\,B}_{m,h} \;=\;
+\frac{\sum_{i \in B_m} w_{i,m}\, r_{i,\,m+h}}{\sum_{i \in B_m} w_{i,m}} ,
+\qquad
+\mathrm{LS}^{(h)}_{m} \;=\; s \cdot
+\Bigl( \bar r^{\,\mathrm{top}}_{m,h} - \bar r^{\,\mathrm{bot}}_{m,h} \Bigr),
+$$
+
+with $w_{i,m} = 1$ for equal weighting and $w_{i,m} = \mathrm{mthcap}_{i,m}$ for value
+weighting, and $s = \pm 1$ the sign from `SignalDoc` — **$s = -1$ for `Size`**, because
+the anomaly is small minus big and reversing it produces a beautifully significant result
+with the wrong label on it.
+
+`Portfolio Period` is a holding period with overlapping cohorts [@jegadeesh1993]: the
+return booked in calendar month $c$ averages the cohorts formed at
+$c-1, \dots, c-H$,
+
+$$
+\mathrm{LS}_{c} \;=\; \frac{1}{H}\sum_{h=1}^{H} \mathrm{LS}^{(h)}_{\,c-h} .
+$$ {#eq-cohorts}
+
+The momentum signal itself is the twelve-month return ending one month before formation:
+
+$$
+s^{\mathrm{mom}}_{i,m}
+\;=\;
+\exp\!\Biggl(\;\sum_{\tau = m-k-11}^{\,m-k} \log\bigl(1 + r_{i\tau}\bigr)\Biggr) - 1,
+\qquad k = 1 ,
+$$ {#eq-mom}
+
+defined only where the stock has a contiguous monthly record across the window, and
+`Size` is simply $s^{\mathrm{size}}_{i,m} = \log(\mathrm{mthcap}_{i,m})$.
+
+## The verdict
+
+```{python}
+#| label: rebuild-load
+#| code-fold: true
+#| code-summary: "read the committed rebuild results"
+
+def load_rebuild(name, col):
+    df = pd.read_csv(OUT / f"rebuild_{name}.csv")
+    o  = df.dropna(subset=[col, "theirs"]).copy()
+    o["gap"] = o[col] - o["theirs"]
+    o["year"] = [ym(v)[0] for v in o["mi"]]
+    return o
+
+reb = {"Size": load_rebuild("Size", "mine"),
+       "Mom12m": load_rebuild("Mom12m", "mine_hold1")}
+COL = {"Size": "mine", "Mom12m": "mine_hold1"}
+
+def gap_t(o):
+    g = o["gap"].to_numpy()
+    return g.mean(), g.std(ddof=1) / np.sqrt(len(g))
+
+def corr(o, name):
+    return float(np.corrcoef(o[COL[name]], o["theirs"])[0, 1])
+```
+
+```{python}
+#| label: tbl-rebuild
+#| tbl-cap: "Rebuilt from CRSP against the published series, on the common overlap window."
+#| code-fold: true
+
+rows = []
+for name, conv in [("Size", "EW, halves, hold 12"), ("Mom12m", "EW, deciles, hold 1")]:
+    o = reb[name]; mg, sg = gap_t(o)
+    rows.append(f"| **{name}** ({conv}) | {o[COL[name]].mean():.3f} | "
+                f"{o['theirs'].mean():.3f} | {mg:+.3f} (t = {mg/sg:+.2f}) | "
+                f"{corr(o, name):.3f} | {len(o):,} |")
+
+Markdown("| | rebuilt, %/month | Chen–Zimmermann | difference | corr | months |\n"
+         "|---|---:|---:|---:|---:|---:|\n" + "\n".join(rows))
+```
+
+```{python}
+#| label: fig-rebuild
+#| fig-cap: "Cumulative long-short value of one dollar, log scale. Rebuilt from CRSP against the published series."
+#| code-fold: true
+
+fig, axes = plt.subplots(1, 2, figsize=(7.6, 3.4))
+
+# Identity is carried by line style as well as hue, so the panels survive greyscale
+# printing and colour-vision deficiency without labels sitting on top of the data.
+for ax, name in zip(axes, ["Size", "Mom12m"]):
+    o = reb[name]; x = mi_to_ts(o["mi"])
+    a = (1 + o[COL[name]] / 100).cumprod().to_numpy()
+    b = (1 + o["theirs"] / 100).cumprod().to_numpy()
+    ax.plot(x, b, color=ORANGE, lw=1.5, ls=(0, (4, 2)), label="Chen–Zimmermann", zorder=2)
+    ax.plot(x, a, color=BLUE,   lw=1.1, label="rebuilt from CRSP", zorder=3)
+    ax.set_yscale("log"); ax.set_title(name)
+    ax.grid(axis="x", visible=False); ax.margins(x=0.02)
+    ax.legend(loc="upper left", fontsize=8)
+
+axes[0].set_ylabel("cumulative long-short, log scale")
+axes[0].annotate("the two lines coincide", xy=(0.50, 0.08), xycoords="axes fraction",
+                 fontsize=8.5, color=MUTED)
+axes[1].annotate("same turning points,\nshallower slope", xy=(0.52, 0.06),
+                 xycoords="axes fraction", fontsize=8.5, color=MUTED)
+fig.tight_layout()
+plt.show()
+```
+
+**Size reproduces essentially exactly** — a difference of
+`{python} f"{gap_t(reb['Size'])[0]:+.3f}"` %/month over
+`{python} f"{len(reb['Size']):,}"` months, correlation
+`{python} f"{corr(reb['Size'], 'Size'):.3f}"`. In @fig-rebuild the two lines are hard to
+tell apart across a century.
+
+**Momentum reproduces in shape and comes in light in level.** The right-hand panel shows
+two lines with the same turning points and different slopes, which on a log scale is the
+signature of a roughly constant per-month shortfall rather than one bad episode.
+
+## Is the momentum gap real?
+
+```{python}
+#| label: gap-diagnostic
+#| code-fold: false
+
+o = reb["Mom12m"]
+mg, sg = gap_t(o)
+sd_gap = o["gap"].std(ddof=1)
+
+# 1. thin pre-1963 data, when CRSP covers NYSE only?
+pre, post = o[o["year"] < 1963], o[o["year"] >= 1963]
+(mpre, spre), (mpost, spost) = gap_t(pre), gap_t(post)
+
+# 2. a uniform implementation difference, present every month?
+share_below = (o["gap"] < 0).mean()
+
+# 3. or a tail?
+worst   = o.reindex(o["gap"].abs().sort_values(ascending=False).index)
+share60 = worst.head(60)["gap"].sum() / len(o) / mg
+cut     = o["gap"].abs().quantile(0.90)
+trim_all  = o[o["gap"].abs() <= cut]["gap"].mean()
+cut_pre   = pre["gap"].abs().quantile(0.90)
+trim_pre  = pre[pre["gap"].abs() <= cut_pre]["gap"].mean()
+corr_abs  = float(np.corrcoef(o["gap"].abs(), o["theirs"].abs())[0, 1])
+```
+
+**First, is it even distinguishable from zero?** A momentum long-short series is volatile
+and so is the month-by-month difference between two implementations of one. The gap has a
+standard deviation of `{python} f"{sd_gap:.2f}"` %/month, so a mean of
+`{python} f"{mg:+.3f}"` over `{python} f"{len(o):,}"` months carries
+**t = `{python} f"{mg/sg:.2f}"`**. Before 1963 it is t = `{python} f"{mpre/spre:.2f}"`;
+from 1963 on, t = `{python} f"{mpost/spost:.2f}"`. Neither era rejects equality.
+
+**Hypothesis 1: thin early data.** CRSP covers NYSE only until mid-1962, so the natural
+guess is that the gap sits before 1963 and the modern period replicates cleanly.
+*Rejected.* The gap is `{python} f"{mpre:+.3f}"` before 1963 and
+`{python} f"{mpost:+.3f}"` after — essentially identical.
+
+**Hypothesis 2: a uniform implementation difference.** If a slightly different screen
+produced a slightly different portfolio every month, the sign of the difference would be
+persistent. *Rejected.* The rebuilt series is below the published one in
+`{python} f"{100*share_below:.1f}"`% of months, a coin flip.
+
+**What it actually is: a tail.** The 60 largest-|gap| months — 5% of the sample — carry
+`{python} f"{100*share60:.0f}"`% of the mean difference. Trim the largest decile of months
+and the full-sample gap falls to `{python} f"{trim_all:+.3f}"`, while the pre-1963 gap
+flips sign to `{python} f"{trim_pre:+.3f}"`. And the absolute gap correlates
+`{python} f"{corr_abs:.2f}"` with the absolute size of that month's published return: the
+discrepancy is largest exactly when momentum itself moves most.
+
+```{python}
+#| label: tbl-worst
+#| tbl-cap: "The eight months that carry the momentum difference."
+#| code-fold: true
+
+rows = []
+for _, r in worst.head(8).iterrows():
+    y, m = ym(r["mi"])
+    rows.append(f"| {y}-{m:02d} | {r['mine_hold1']:.2f} | {r['theirs']:.2f} | {r['gap']:+.2f} |")
+Markdown("| Month | rebuilt | published | difference |\n|---|---:|---:|---:|\n"
+         + "\n".join(rows))
+```
+
+These name themselves. 2009-03 is the worst month on record for momentum, and 1939-09 is
+the outbreak-of-war rebound — both are momentum crashes in the sense of @daniel2016, when
+past losers surge and the extreme deciles turn over violently. In exactly those months a
+single imputed price, or one stock that delists in the middle of a holding period, moves a
+bucket mean by percentage points, and two implementations of a decile sort must part
+company. @shumway1997 is the classic statement of how much the treatment of disappearing
+stocks matters.
+
+::: {.callout-note appearance="simple"}
+**The line not crossed.** No screen variants were tried. Closing the remaining
+`{python} f"{abs(mg):.3f}"` %/month by searching filter combinations until the number
+matches would be curve-fitting the replication itself — the same behaviour this project
+exists to measure. The position without it is defensible: one signal reproduces exactly,
+the other reproduces to within sampling error.
+:::
+
+## The bug this caught, and why correlation hid it {#sec-skip}
+
+`SignalDoc` defines `Mom12m` over "months t-12 and t-1". **Month $t$ is excluded** — the
+$k = 1$ in @eq-mom. The first implementation used $m-11,\dots,m$ instead, which pulls
+short-term reversal [@jegadeesh1990] into a momentum signal: last month's return is
+negatively autocorrelated, so including it does not add noise, it adds an effect of the
+opposite sign.
+
+```{python}
+#| label: skip
+#| code-fold: false
+
+# `mine` and `mine_noskip` are both the documented three-month holding period. They
+# differ in one thing only: whether month t is inside the formation window. Compare them
+# on the same rows, so the holding period cannot be doing the work.
+ns = (pd.read_csv(OUT / "rebuild_Mom12m.csv")
+        .dropna(subset=["mine", "mine_noskip", "theirs"]))
+mean_skip   = ns["mine"].mean()
+mean_noskip = ns["mine_noskip"].mean()
+mean_theirs = ns["theirs"].mean()
+corr_noskip = float(np.corrcoef(ns["mine_noskip"], ns["theirs"])[0, 1])
+```
+
+Holding everything else fixed at the documented three-month holding period, dropping the
+skip takes the long-short mean from `{python} f"{mean_skip:.3f}"` to
+`{python} f"{mean_noskip:.3f}"` %/month, against a published
+`{python} f"{mean_theirs:.3f}"`. Rebalanced monthly, where no cohort skips at all, it went
+to −0.009 %/month: the premium gone entirely.
+
+**And the correlation never flinched: `{python} f"{corr_noskip:.3f}"`, peaking at lag 0.**
+That is the lesson worth keeping. A correlation confirms that the wiring is right and the
+timing is right; it rules out a merge error or an off-by-one in the calendar. It says
+nothing about whether the *signal definition* is right, because a wrong window is still
+mostly the same portfolio. Only the level catches this.
+
+# What the design cannot do, and what comes next {#sec-next}
+
+## Two-way fixed effects under staggered treatment
+
+Publication arrives at a different date for every signal, so @eq-main is a two-way fixed
+effects regression with staggered adoption. @goodmanbacon2021 shows that such an estimator
+is a variance-weighted average of all possible two-group comparisons, **including
+comparisons that use already-treated signals as controls for later-treated ones**. When the
+treatment effect varies across signals or evolves over time — and decay that continues for
+years after publication is precisely a treatment effect that evolves — those comparisons
+enter with the wrong sign and the weighted average need not lie inside the range of the
+true effects [@dechaisemartin2020].
+
+That is a concrete reason to doubt $\hat\beta_2$ as a causal estimate, separate from the
+identification worry in @sec-design. The repairs are known: @callaway2021 estimate group-
+time effects using only not-yet-treated units as controls, @sun2021 do the interaction-
+weighted version for event studies, and @borusyak2024 give the efficient imputation
+estimator. @roth2023 survey the choice. **This is the next thing to build**, and it should
+change the number.
+
+## Why not regression discontinuity
+
+Publication is a date, which invites the thought that a discontinuity design applies. It
+does not. RDD needs a running variable with a cutoff and units that cannot precisely
+manipulate their position around it. Here the "running variable" is calendar time, the
+cutoff is anticipated — working papers circulate for years before a journal issue appears —
+and authors have some control over timing. Anticipation alone is fatal: informed traders
+acting on a working paper push part of the decay *before* the event, which biases the
+estimate towards zero and makes the post-publication decline a **lower bound** on the true
+one. The honest labels are interrupted time series and event study; the sharper version is
+staggered difference-in-differences, above.
+
+## How fast, and to what floor
+
+A three-window average says the edge fell. It does not say how quickly, or whether it fell
+to zero. Two routes:
+
+$$
+\alpha_t \;=\; \phi + (\alpha_0 - \phi)\,e^{-\lambda t}
+\qquad\Longrightarrow\qquad
+\text{half-life} \;=\; \frac{\ln 2}{\lambda},
+$$
+
+fitted per signal by nonlinear least squares, is the simple version, and $\phi$ is the
+**floor** — which @grossman1980 says should be strictly positive, so estimating it is a
+test of that prediction rather than an accounting exercise. The upgrade is a local-level
+state-space model,
+
+$$
+r_t = \alpha_t + \varepsilon_t, \qquad
+\alpha_t = \alpha_{t-1} + \eta_t, \qquad
+\varepsilon_t \sim N(0,\sigma^2_\varepsilon),\;\; \eta_t \sim N(0,\sigma^2_\eta),
+$$
+
+estimated by the Kalman filter and smoother [@durbin2012], which returns an $\alpha_t$ path
+with a credible interval instead of a curve fitted by eye. A Markov-switching version
+[@hamilton1989] would give a "probability the edge is still alive" series.
+
+## Who dies fast, and why
+
+The cross-sectional question is where the arbitrage story becomes falsifiable: decay should
+be fastest where arbitrage is cheapest. The proxies — Amihud illiquidity [@amihud2002],
+market capitalisation, idiosyncratic volatility, short interest, institutional ownership —
+are all computable from the CRSP panel this project already built, which is the reason
+@sec-rebuild exists. Independently, `contrib.global_factor` [@jensen2023] carries 153
+characteristics across 93 countries, which turns the same hypothesis into a cross-country
+test with completely different identifying variation.
+
+## Open items, stated plainly
+
+- Re-run on the @mclean2016 97 to see whether the weaker channel separation is a
+  universe-composition effect.
+- Replace @eq-main with @callaway2021 and @sun2021 and report how much the estimate moves.
+- An event-time plot: average return by months-since-publication, which is the picture
+  @eq-main compresses into two numbers.
+- Gross profitability [@novymarx2013] as a third rebuilt signal — it needs Compustat and
+  the CCM link, so it is a genuinely harder test of the pipeline than either signal here.
+
+# Reproducing this document {#sec-repro}
+
+```bash
+# Sections 1–6 need only the two free Chen–Zimmermann files in data/
+quarto render paper/alpha-decay.qmd --to html
+
+# Section 7 reads committed result files and needs nothing.
+# To regenerate those from source (WRDS subscription required):
+python 03_crsp_pull.py
+python 04_build_anomalies.py
+```
+
+```{python}
+#| label: verify
+#| code-fold: false
+
+# The three-window means recomputed here must match the ones 02_decay_panel.py wrote.
+# If this assertion ever fires, the script and the paper have drifted apart and one of
+# them is wrong -- which is the entire reason the check is in the document.
+saved = pd.read_csv(OUT / "result1_windows.csv", index_col=0)
+assert saved.shape[0] == N_MATCHED, (saved.shape[0], N_MATCHED)
+for c in ["in_sample", "post_sample", "post_pub"]:
+    np.testing.assert_allclose(saved[c].mean(), table[c].mean(), rtol=1e-10)
+print(f"verified against output/result1_windows.csv: {N_MATCHED} signals, three windows match")
+```
+
+# References {.unnumbered}
+
+::: {#refs}
+:::

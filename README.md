@@ -11,6 +11,13 @@ to the end of the current data.
 
 ![three-window decay](output/fig02_decay.png)
 
+> **The full write-up is in [`paper/alpha-decay.qmd`](paper/alpha-decay.qmd)** — the
+> question, the estimand, the estimator derived in LaTeX, the code that implements it,
+> the number, and the test the number has to survive, with maths and code interleaved.
+> `quarto render paper/alpha-decay.qmd` builds it. No number in its prose is typed by
+> hand: every one is computed by a chunk or read out of a file in `output/`, and the last
+> chunk fails the render if the document and the scripts ever disagree.
+
 Between the 1980s and today, several hundred cross-sectional return predictors have been
 documented in the finance literature. If those edges are real risk premia, publication
 should not change them. If they are mispricing, publication should destroy them — because
@@ -158,21 +165,23 @@ in shape and comes in 12% light in level.
 **That 12% is not statistically distinguishable from zero.** A momentum long-short series is
 volatile, and so is the month-by-month difference between two implementations of one: the gap
 has a standard deviation of 2.03 %/month, so a mean of −0.107 over 1,174 months carries
-t = −1.82. Before 1963 it is t = −0.75; from 1963 on, t = −1.93. Neither era rejects equality
+t = −1.82. Before 1963 it is t = −0.74; from 1963 on, t = −1.94. Neither era rejects equality
 at the 5% level.
 
 Where the difference sits is more informative than its size. The 60 largest-|gap| months -
 5% of the sample — carry **100%** of the mean difference. Drop the largest decile of months
 and the full-sample gap falls to −0.051, while the pre-1963 gap flips sign to **+0.067**. The
 rebuilt series is below the published one in 53% of months, a coin flip. And the offending
-months are the ones anyone would name in advance: 1933-01, 1939-10, 1939-12, 1942-02, 2009-01,
-2009-04 — momentum crashes and their rebounds, when the extreme deciles turn over violently
-and a single imputed price or mid-holding-period delisting moves a bucket mean by percentage
-points.
+months are the ones anyone would name in advance: 1931-01, 1932-12, 1939-09, 1939-11, 1942-01,
+1943-01, 2008-12 and 2009-03 — momentum crashes and the rebounds that follow them, when the
+extreme deciles turn over violently and a single imputed price or mid-holding-period delisting
+moves a bucket mean by percentage points. 2009-03 is the single worst month on record for
+momentum and 1939-09 is the outbreak-of-war rebound; both are exactly where two implementations
+of a decile sort should be expected to part company.
 
 So the residual is a tail phenomenon concentrated in a handful of crash months, not a
 systematic wiring error. **A data-coverage explanation was the obvious guess and the data
-reject it**: the gap is −0.093 before 1963, when CRSP covers NYSE only, and −0.116 after,
+reject it**: the gap is −0.092 before 1963, when CRSP covers NYSE only, and −0.116 after,
 when it covers three exchanges. Thin early data is not what this is.
 
 ### What the rebuild caught
