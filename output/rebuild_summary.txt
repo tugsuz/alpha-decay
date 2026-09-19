@@ -13,7 +13,7 @@ Size  --  Banz (1981, JFE)
       convention                      mean    t     corr@0   best lag   gap vs CZ
       documented   (hold=12, skip=1)  0.324  2.85    0.992   +0        +0.002
       monthly      (hold=1, skip=1)   0.326  2.70    0.974   +0        +0.005
-      overlap window: 1926-07 to 2025-12
+      overlap window: 1926-07 to 2024-12
 
   closest to the published series: documented   (hold=12, skip=1), gap 0.002 %/month, corr 0.992.
   Every convention peaks at lag 0, so the formation-to-holding offset is right;
@@ -25,19 +25,19 @@ Size  --  Banz (1981, JFE)
 
   where the gap sits, decade by decade (documented   (hold=12, skip=1)):
       decade   months    mine   theirs     gap
-      1920s       41  -0.570  -0.572   +0.001
-      1930s      120   1.399   1.449   -0.050
-      1940s      120   0.687   0.664   +0.022
-      1950s      120   0.083   0.092   -0.008
-      1960s      120   0.606   0.631   -0.025
-      1970s      120   0.271   0.234   +0.037
-      1980s      120  -0.141  -0.146   +0.004
-      1990s      120   0.350   0.344   +0.006
-      2000s      120   0.555   0.581   -0.026
-      2010s      120  -0.393  -0.450   +0.057
-      2020s       61  -0.059  -0.068   +0.009
-      pre-1963 (CRSP is NYSE-only)     n= 437  mine  0.535  theirs  0.552  gap -0.016
-      1963 onward                      n= 745  mine  0.200  theirs  0.187  gap +0.013
+      1920s       42  -0.700  -0.714   +0.013
+      1930s      120   1.425   1.478   -0.053
+      1940s      120   0.724   0.704   +0.021
+      1950s      120   0.076   0.084   -0.008
+      1960s      120   0.549   0.573   -0.024
+      1970s      120   0.348   0.312   +0.037
+      1980s      120  -0.189  -0.195   +0.005
+      1990s      120   0.383   0.378   +0.005
+      2000s      120   0.534   0.560   -0.026
+      2010s      120  -0.355  -0.417   +0.062
+      2020s       60  -0.114  -0.115   +0.001
+      pre-1963 (CRSP is NYSE-only)     n= 438  mine  0.527  theirs  0.544  gap -0.017
+      1963 onward                      n= 744  mine  0.205  theirs  0.191  gap +0.014
 
 ------------------------------------------------------------------------------
 Mom12m  --  Jegadeesh and Titman (1993, JF)
@@ -51,7 +51,7 @@ Mom12m  --  Jegadeesh and Titman (1993, JF)
       documented   (hold=3, skip=1)   0.652  2.72    0.968   +0        -0.247
       monthly      (hold=1, skip=1)   0.791  3.17    0.972   +0        -0.107
       no skip      (hold=3, skip=0)   0.460  1.82    0.974   +0        -0.439
-      overlap window: 1927-02 to 2025-12
+      overlap window: 1927-02 to 2024-12
 
   closest to the published series: monthly      (hold=1, skip=1), gap 0.107 %/month, corr 0.972.
   Every convention peaks at lag 0, so the formation-to-holding offset is right;
@@ -63,16 +63,16 @@ Mom12m  --  Jegadeesh and Titman (1993, JF)
 
   where the gap sits, decade by decade (monthly      (hold=1, skip=1)):
       decade   months    mine   theirs     gap
-      1920s       33   2.571   2.394   +0.178
-      1930s      120  -1.274  -1.065   -0.209
-      1940s      120   1.128   1.328   -0.200
-      1950s      120   1.119   1.115   +0.004
-      1960s      120   1.329   1.300   +0.028
-      1970s      120   0.819   0.949   -0.130
-      1980s      120   1.667   1.776   -0.108
-      1990s      120   0.813   0.913   -0.100
-      2000s      120  -0.518  -0.245   -0.273
-      2010s      120   1.216   1.299   -0.083
-      2020s       61   1.446   1.507   -0.061
-      pre-1963 (CRSP is NYSE-only)     n= 429  mine  0.551  theirs  0.645  gap -0.093
-      1963 onward                      n= 745  mine  0.930  theirs  1.045  gap -0.116
+      1920s       34   2.902   2.789   +0.113
+      1930s      120  -1.328  -1.126   -0.202
+      1940s      120   1.024   1.227   -0.203
+      1950s      120   1.172   1.169   +0.002
+      1960s      120   1.424   1.343   +0.081
+      1970s      120   0.760   0.913   -0.153
+      1980s      120   1.682   1.790   -0.108
+      1990s      120   0.856   0.939   -0.083
+      2000s      120  -0.615  -0.312   -0.303
+      2010s      120   1.141   1.238   -0.097
+      2020s       60   1.607   1.640   -0.034
+      pre-1963 (CRSP is NYSE-only)     n= 430  mine  0.567  theirs  0.659  gap -0.092
+      1963 onward                      n= 744  mine  0.921  theirs  1.037  gap -0.116
