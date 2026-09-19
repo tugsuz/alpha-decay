@@ -24,6 +24,7 @@ output/*
 # Quarto build products. The .qmd is the source; the intermediate render and the
 # generated notebook are not committed.
 paper/_output/
+paper/_freeze/
 paper/.quarto/
 paper/*.ipynb
 .quarto/
