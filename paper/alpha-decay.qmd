@@ -24,8 +24,7 @@ written out, then the number, then the test that the number survives.
 
 Source: [`github.com/tugsuz/alpha-decay`](https://github.com/tugsuz/alpha-decay).
 Sections @sec-question through @sec-restriction need only the free Chen–Zimmermann
-files;
-@sec-rebuild reads committed results and needs nothing at all.
+files; @sec-rebuild reads committed results and needs nothing at all.
 :::
 
 ```{python}

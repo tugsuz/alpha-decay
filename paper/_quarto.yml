@@ -35,7 +35,6 @@ format:
     keep-tex: false
 
 bibliography: references.bib
-csl: null
 citeproc: true
 
 execute:
@@ -45,5 +44,4 @@ execute:
   freeze: auto
   cache: false
 
-knitr: null
 jupyter: python3

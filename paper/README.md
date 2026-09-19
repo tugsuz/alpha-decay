@@ -10,9 +10,26 @@ the ECN 593 applied project, and (via `format: revealjs`) the slides.
 ## Rendering
 
 ```bash
+source ~/venvs/wrds/bin/activate
+python -m pip install jupyter                     # once; Quarto runs the code through it
+export QUARTO_PYTHON="$(which python)"            # pin Quarto to THIS interpreter
+
 quarto render paper/alpha-decay.qmd --to html     # → paper/_output/alpha-decay.html
 quarto render paper/alpha-decay.qmd --to pdf      # needs a LaTeX distribution
 quarto render paper/alpha-decay.qmd               # both, per _quarto.yml
+```
+
+`QUARTO_PYTHON` is the line that saves an afternoon. This machine has a conda `base`, a
+`wrds` venv and a system `python3`, and Quarto picks one by its own rules rather than by
+which prompt you are looking at. Pointing it at the interpreter that actually holds
+`pandas`, `numpy`, `matplotlib` and `jupyter` removes the guesswork. `quarto check jupyter`
+prints the one it found, which is the first thing to look at if a render fails with
+`ModuleNotFoundError` or `Jupyter is not available in this Python installation`.
+
+To make it permanent, add the export to `~/.zshrc` with the path written out:
+
+```bash
+echo 'export QUARTO_PYTHON="$HOME/venvs/wrds/bin/python"' >> ~/.zshrc
 ```
 
 Requirements:
@@ -20,8 +37,8 @@ Requirements:
 - **Quarto ≥ 1.4** — the document uses inline `` `{python} ...` `` expressions, which
   arrived in 1.4. `quarto --version` to check; `brew install quarto` or the installer at
   quarto.org.
-- **Python** with `pandas`, `numpy`, `matplotlib`, `jupyter`. The project venv already has
-  the first three; `pip install jupyter` if `quarto render` complains about a kernel.
+- **Python** with `pandas`, `numpy`, `matplotlib` and `jupyter`. Quarto also needs `pyyaml`,
+  which comes in with `jupyter`.
 - **PDF only:** a TeX installation. `quarto install tinytex` is the least painful route.
 - **Data:** `data/PredictorLSretWide.csv` and `data/SignalDoc.csv`, both free from
   openassetpricing.com. No WRDS subscription is needed to render this document — the CRSP

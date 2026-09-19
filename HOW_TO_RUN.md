@@ -15,7 +15,7 @@ mkdir -p ~/venvs
 /usr/bin/python3 -m venv ~/venvs/wrds
 source ~/venvs/wrds/bin/activate
 pip install --upgrade pip
-pip install wrds pandas pyarrow matplotlib
+pip install wrds pandas pyarrow matplotlib jupyter
 ```
 
 You will know it worked because your prompt now starts with `(wrds)`.
