@@ -298,6 +298,13 @@ The small-sample correction on the clustered covariance is (G/(G−1))·((n−1)
 k = 2; it does not subtract the absorbed fixed effects from the degrees of freedom, which
 with n = 173,302 changes the standard errors by about 0.1%.
 
+## License
+
+The code is MIT licensed. The data is not mine to license: the Chen–Zimmermann files are
+distributed by their authors on their own terms and are not redistributed here, and the
+series in `output/` that are built from CRSP are aggregated results derived from data
+licensed through WRDS, not the underlying data itself.
+
 ## Reference
 
 Chen, A. Y. and T. Zimmermann (2022), "Open Source Cross-Sectional Asset Pricing",
