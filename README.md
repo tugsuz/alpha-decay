@@ -94,6 +94,107 @@ McLean and Pontiff get a cleaner separation (−26% against −58%) on 97 anomal
 universe is twice as large and includes weaker and less-replicated signals, which is the
 obvious first explanation and is the next thing to check by re-running on their 97.
 
+## Validating the inputs: rebuilding two signals from raw CRSP
+
+Result 1 takes Chen–Zimmermann's long-short returns as given. That is a dependency, and an
+untested one: everything above rests on 189 series somebody else computed. So two signals
+were rebuilt from scratch out of CRSP security-level data and checked month by month against
+the published versions — `Size`, about the simplest anomaly there is, and `Mom12m`, which
+has a formation window, a skip month and overlapping holding periods and is therefore easy
+to get subtly wrong.
+
+`03_crsp_pull.py` builds the panel; `04_build_anomalies.py` constructs the signals and scores
+them. **These two scripts need a WRDS subscription. Result 1 does not.**
+
+### The panel
+
+CRSP monthly, **1926-01 to 2026-06, 27,006 securities**, pulled through the WRDS Postgres
+interface in decade chunks to parquet.
+
+The tables are not the ones most replication code on the internet uses. CRSP has finished
+migrating from the legacy SIZ layout to CIZ, and February 2025 was the last SIZ release, so
+`crsp.msf`, `crsp.msenames` and `crsp.msedelist` are gone:
+
+| legacy (SIZ) | current (CIZ) |
+|---|---|
+| `crsp.msf` | `crsp.stkMthSecurityData` (`crsp.msf_v2`) |
+| `crsp.msenames` | `crsp.stkSecurityInfoHist` (`crsp.stocknames_v2`) |
+| `crsp.msedelist` | `crsp.stkDelists` |
+
+Three things in that migration change the answer rather than just the spelling:
+
+1. **Delisting returns are already inside `mthret`.** CRSP's own SIZ-to-CIZ field map sends
+   `MDLRET` into `MthRet` with a `Recalc/DelistConv` note. Merging `stkDelists` on top of the
+   return — which is what every pre-2025 replication script does — double-counts the
+   delisting adjustment.
+2. **`shrcd in (10,11) and exchcd in (1,2,3)` no longer exists.** The US common-stock screen
+   is now eight fields: `sharetype='NS'`, `securitytype='EQTY'`, `securitysubtype='COM'`,
+   `usincflg='Y'`, `issuertype in ('ACOR','CORP')`, `primaryexch in ('N','A','Q')`,
+   `conditionaltype='RW'`, `tradingstatusflg='A'`.
+3. **Use `mthcap`, never `abs(prc) * shrout`.** CRSP stores a negative price when the figure
+   is a bid-ask average rather than a trade, so taking the absolute value is a habit that
+   hides exactly the thing the sign is there to flag.
+
+Two sanity checks run at the end of the pull: 7,235 distinct US common stocks in 2000, and a
+13.5% equal-weighted mean annual return 1963-2024. Both pass. The same panel puts the count
+today at roughly 3,700 — about half the 2000 number.
+
+### The two signals, against the published series
+
+Implementation parameters are read out of `SignalDoc.csv` at runtime rather than typed in:
+sign, weighting, quantile cut, holding period. Guessing them and then comparing would be
+comparing two different strategies and calling the difference a replication failure.
+
+![rebuilt from CRSP against the published series](output/fig04_rebuild.png)
+
+| | rebuilt | Chen–Zimmermann | difference | correlation |
+|---|---|---|---|---|
+| **Size** (EW, halves, hold 12) | 0.324 %/month | 0.322 | **+0.002** (t = +0.16) | **0.992** |
+| **Mom12m** (EW, deciles, hold 1) | 0.791 %/month | 0.900 | −0.107 (t = −1.82) | 0.972 |
+
+Size reproduces essentially exactly, across 1,182 months and a century. Momentum reproduces
+in shape and comes in 12% light in level.
+
+**That 12% is not statistically distinguishable from zero.** A momentum long-short series is
+volatile, and so is the month-by-month difference between two implementations of one: the gap
+has a standard deviation of 2.03 %/month, so a mean of −0.107 over 1,174 months carries
+t = −1.82. Before 1963 it is t = −0.75; from 1963 on, t = −1.93. Neither era rejects equality
+at the 5% level.
+
+Where the difference sits is more informative than its size. The 60 largest-|gap| months -
+5% of the sample — carry **100%** of the mean difference. Drop the largest decile of months
+and the full-sample gap falls to −0.051, while the pre-1963 gap flips sign to **+0.067**. The
+rebuilt series is below the published one in 53% of months, a coin flip. And the offending
+months are the ones anyone would name in advance: 1933-01, 1939-10, 1939-12, 1942-02, 2009-01,
+2009-04 — momentum crashes and their rebounds, when the extreme deciles turn over violently
+and a single imputed price or mid-holding-period delisting moves a bucket mean by percentage
+points.
+
+So the residual is a tail phenomenon concentrated in a handful of crash months, not a
+systematic wiring error. **A data-coverage explanation was the obvious guess and the data
+reject it**: the gap is −0.093 before 1963, when CRSP covers NYSE only, and −0.116 after,
+when it covers three exchanges. Thin early data is not what this is.
+
+### What the rebuild caught
+
+Two conventions that occupy one line of documentation each and change the answer by more than
+the anomaly is worth:
+
+- **The skip month.** SignalDoc defines Mom12m over "months t-12 and t-1" — month t is
+  excluded. Forming on t-11..t instead pulls short-term reversal into the signal and cancels
+  the premium outright: the monthly-rebalanced long-short mean goes from 0.791 to −0.009
+  %/month. Correlation with the published series stayed at 0.974 throughout, which is the
+  trap. Correlation confirms that the wiring is right; it says nothing about whether the
+  signal is.
+- **The holding period.** `Portfolio Period` does mean months held, with overlapping cohorts,
+  and it is right for Size (hold 12 gives +0.002 against monthly's +0.005) but wrong for
+  Mom12m (the documented hold 3 gives 0.652, further off than monthly's 0.791). Correlations
+  across these variants differ by 0.005, so only the level can choose between them.
+
+No screen variants were tried. Searching filters until the number matches is curve-fitting the
+replication, and the position without it is defensible on its own: one signal reproduces
+exactly, the other reproduces to within sampling error.
+
 ## What comes next
 
 - **Re-run on the McLean–Pontiff 97**, to see whether the channel separation is a
@@ -109,9 +210,16 @@ obvious first explanation and is the next thing to check by re-running on their 
   publication effect should be estimated with Callaway–Sant'Anna and Sun–Abraham estimators
   rather than the two-way fixed-effects specification used above and in the original
   literature.
-- **Cross-section of decay speed** against arbitrage-cost proxies (Amihud illiquidity,
-  size, idiosyncratic volatility), which is where the story about *why* edges die gets
-  tested rather than asserted.
+- **Cross-section of decay speed** against arbitrage-cost proxies — Amihud illiquidity,
+  size, idiosyncratic volatility, short interest (`comp.sec_shortint`), institutional
+  ownership (`tfn` 13F) — which is where the story about *why* edges die gets tested rather
+  than asserted. All of these are computable from the panel the CRSP section already built. That is
+  why that section exists: it is the data layer for this one, and it has now been validated
+  against a published series rather than assumed correct.
+- **A second, independent universe.** `contrib.global_factor` (Jensen–Kelly–Pedersen) carries
+  153 characteristics across 93 countries from 1985. If an edge decays after publication
+  because capital arbitrages it away, the decay should be weaker in markets that capital
+  reached later — a cross-country test the US-only data cannot run.
 
 ## Data
 
@@ -132,20 +240,35 @@ code; `ChNAnalyst`, `PriceDelayTstat` and `Recomm_ShortInterest` carry major rev
 bug fixes in that translation, and all three are in the universe used here.
 
 `data/` is gitignored — the files are not mine to redistribute and the download takes a
-minute. **No WRDS subscription is required for anything in this repository.** A separate
-strand of the project builds two or three anomalies from raw CRSP for comparison; that code
-is not here yet.
+minute. **No WRDS subscription is required for Result 1.**
+
+The CRSP rebuild additionally uses **CRSP monthly stock data** and the Fama–French factors, pulled
+from WRDS by `03_crsp_pull.py` into `data/crsp_monthly.parquet` (97 MB) and
+`data/ff_factors_monthly.parquet`. That does require a subscription, and neither file is
+committed. The WRDS username is read from the `WRDS_USERNAME` environment variable or
+prompted for; no credential is written into any file in this repository.
 
 ## Running it
 
 ```bash
 python 01_first_figure.py inspect   # what the raw files actually contain
 python 01_first_figure.py figure    # one anomaly, publication date marked
-python 02_decay_panel.py            # the three-window decay, all signals
+python 02_decay_panel.py            # Result 1: the three-window decay, all signals
 ```
 
 Writes `output/result1_summary.txt`, `output/result1_windows.csv` (one row per signal) and
-`output/fig02_decay.png`.
+`output/fig02_decay.png`. Runs in about a second on pandas, numpy and matplotlib alone.
+
+The CRSP rebuild needs WRDS and the `wrds` package, and runs in that order:
+
+```bash
+python 03_crsp_pull.py              # CRSP monthly panel, by decade, restartable
+python 04_build_anomalies.py        # rebuild Size and Mom12m, score against Chen–Zimmermann
+```
+
+Writes `output/rebuild_summary.txt`, `output/rebuild_Size.csv`,
+`output/rebuild_Mom12m.csv` and `output/fig04_rebuild.png`. The pull takes a few minutes and
+resumes from whatever decade files already exist; the rebuild takes about a minute.
 
 ## Notes on method
 
