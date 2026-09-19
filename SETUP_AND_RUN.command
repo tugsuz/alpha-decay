@@ -9,13 +9,13 @@ echo " alpha-decay setup"
 echo " working folder: $(pwd)"
 echo "================================================================"
 
-VENV="$HOME/venvs/alpha"
+VENV="$HOME/venvs/wrds"
 
 if [ ! -d "$VENV" ]; then
   echo
   echo "--> Creating a virtual environment at $VENV"
   echo "    (a private folder holding one Python and its packages,"
-  echo "     so nothing here can break your Anaconda install)"
+  echo "     so nothing here can break the rest of the machine)"
   echo "    \$ /usr/bin/python3 -m venv $VENV"
   /usr/bin/python3 -m venv "$VENV" || { echo "FAILED to create venv"; read -r; exit 1; }
 else

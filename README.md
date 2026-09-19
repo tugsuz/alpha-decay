@@ -287,8 +287,8 @@ resumes from whatever decade files already exist; the rebuild takes about a minu
 
 ## Notes on method
 
-Decisions that change the answer are recorded in `DECISIONS.md` rather than buried in the
-code. As run: signals the original authors categorise as placebos are excluded; a signal
+Decisions that change the answer are argued in
+[the paper](https://tugsuz.github.io/alpha-decay/) rather than buried in the code. As run: signals the original authors categorise as placebos are excluded; a signal
 must have at least 24 monthly observations in every window; returns are equal-weighted
 across signals; and the event date is the publication year given in `SignalDoc.csv`, not
 first working-paper circulation — which, if informed traders act on working papers, makes

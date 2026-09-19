@@ -53,9 +53,8 @@ git add docs && git commit -m "Publish the paper" && git push
 
 That renders to `paper/_output/`, copies the single self-contained HTML to
 `docs/index.html` and drops a `.nojekyll` beside it. GitHub Pages serves `docs/` on the
-`main` branch at <https://tugsuz.github.io/alpha-decay/>, which is the link that belongs
-on a résumé or a LinkedIn profile — a recruiter who will not clone a repository will open
-a web page.
+`main` branch at <https://tugsuz.github.io/alpha-decay/>. That is the link to hand to a
+reader: most people will open a web page and will not clone a repository.
 
 Enable it once: repo **Settings → Pages → Source: Deploy from a branch → main → /docs**.
 

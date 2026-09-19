@@ -32,3 +32,14 @@ paper/*.ipynb
 # serves, produced by paper/publish.sh. Committing a build artefact is deliberate
 # here: the render needs the Chen-Zimmermann files, which are not redistributable
 # and so are not in the repo, which means no CI job could rebuild the page.
+
+# A private working file: six method questions to answer in writing. The answers now
+# live in paper/alpha-decay.qmd, where they are argued rather than listed, so the
+# worksheet itself is not part of the published project.
+DECISIONS.md
+
+# Two working files that are not part of this project. PROFILE_README.md is a draft of
+# a GitHub profile page and belongs in the profile repository; GIT_GUIDE.md is a git
+# tutorial written while setting this up. Neither is about alpha decay.
+PROFILE_README.md
+GIT_GUIDE.md

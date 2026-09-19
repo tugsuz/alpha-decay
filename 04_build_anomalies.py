@@ -17,15 +17,16 @@ Writes:
     output/fig04_rebuild.png       cumulative long-short, mine vs theirs
 
 ==============================================================================================
-WHY THIS SCRIPT EXISTS, AND WHY IT IS THE HONEST VERSION OF "I HAVE TOUCHED CRSP"
+WHY THIS SCRIPT EXISTS
 
-Anyone can download a file of pre-computed anomaly returns. The claim worth making is that
-you can rebuild one from raw stock data and land on the same number. This script does that,
-and then it checks itself against the published series rather than asserting a match.
+Result 1 rests on 189 long-short series computed by somebody else. That is a dependency,
+and an untested one. Rebuilding two of them from security-level data and landing on the
+same number tests it, and the panel it needs is the data layer the cross-sectional work
+requires anyway.
 
-The check is the point. If the correlation is high, the pipeline is validated and Result 3
-can be built on it. If it is low, that is a finding about implementation choices, which is
-a better interview answer than a clean match.
+The check is the point. If the rebuilt series agree with the published ones, the pipeline
+is validated and the later results can be built on it. If they do not, the disagreement is
+a finding about implementation choices, and a more informative one than a clean match.
 
 THE PARAMETERS ARE NOT INVENTED. They are read out of SignalDoc.csv at runtime -- the sign,
 the weighting, the quantile cut, the holding period. Chen-Zimmermann implement each signal

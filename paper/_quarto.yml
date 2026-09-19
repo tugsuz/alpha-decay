@@ -37,6 +37,7 @@ format:
     fig-width: 6.5
     fig-height: 3.8
     code-line-numbers: false
+    code-overflow: wrap        # a long source line must wrap, not run off the page
     keep-tex: false
 
 bibliography: references.bib

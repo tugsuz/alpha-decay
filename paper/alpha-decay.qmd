@@ -42,7 +42,8 @@ from IPython.display import Markdown
 ROOT = Path.cwd().parent if Path.cwd().name == "paper" else Path.cwd()
 DATA, OUT = ROOT / "data", ROOT / "output"
 
-HAVE_CZ = (DATA / "PredictorLSretWide.csv").exists() and (DATA / "SignalDoc.csv").exists()
+HAVE_CZ = ((DATA / "PredictorLSretWide.csv").exists()
+           and (DATA / "SignalDoc.csv").exists())
 
 # Two categorical hues, validated for colour-vision deficiency against a light surface
 # (worst-pair CVD ΔE 9.2, normal-vision ΔE 24.0). Identity is never carried by colour
@@ -74,7 +75,8 @@ def mi_to_ts(idx):
     return pd.to_datetime([f"{y}-{m:02d}-01" for y, m in map(ym, idx)])
 
 import matplotlib.patheffects as pe
-HALO = [pe.withStroke(linewidth=2.6, foreground="white")]   # keeps labels legible on marks
+# keeps a label legible where it sits on top of a mark
+HALO = [pe.withStroke(linewidth=2.6, foreground="white")]
 
 def fmt(x, d=3):
     return f"{x:,.{d}f}"
@@ -369,7 +371,7 @@ n_down2 = int((table["post_sample"] < table["in_sample"]).sum())
 ```{python}
 #| label: tbl-windows
 #| tbl-cap: "Equal-weighted across the matched signals, mean monthly long-short return."
-#| code-fold: true
+#| echo: false
 
 Markdown(f"""
 | Window | Mean, %/month | Median, %/month | Mean vs. window 1 |
@@ -441,7 +443,7 @@ the first sign that publication is not the only thing going on.
 ```{python}
 #| label: tbl-panel
 #| tbl-cap: "Equation @eq-main, signal fixed effects absorbed by within-demeaning, standard errors clustered by date."
-#| code-fold: true
+#| echo: false
 
 Markdown(f"""
 | | Full panel ({N_PANEL} signals) | Matched panel ({N_MATCHED}) |
@@ -498,7 +500,7 @@ corr_f = V_f[0, 1] / np.sqrt(V_f[0, 0] * V_f[1, 1])
 ```{python}
 #| label: tbl-restriction
 #| tbl-cap: "Testing $\\beta_2 = \\beta_1$ on the same clustered covariance."
-#| code-fold: true
+#| echo: false
 
 Markdown(f"""
 | | $\\hat\\beta_2 - \\hat\\beta_1$, %/month | se | t |
@@ -607,7 +609,7 @@ def corr(o, name):
 ```{python}
 #| label: tbl-rebuild
 #| tbl-cap: "Rebuilt from CRSP against the published series, on the common overlap window."
-#| code-fold: true
+#| echo: false
 
 rows = []
 for name, conv in [("Size", "EW, halves, hold 12"), ("Mom12m", "EW, deciles, hold 1")]:
@@ -633,7 +635,8 @@ for ax, name in zip(axes, ["Size", "Mom12m"]):
     o = reb[name]; x = mi_to_ts(o["mi"])
     a = (1 + o[COL[name]] / 100).cumprod().to_numpy()
     b = (1 + o["theirs"] / 100).cumprod().to_numpy()
-    ax.plot(x, b, color=ORANGE, lw=1.5, ls=(0, (4, 2)), label="Chen–Zimmermann", zorder=2)
+    ax.plot(x, b, color=ORANGE, lw=1.5, ls=(0, (4, 2)), zorder=2,
+            label="Chen–Zimmermann")
     ax.plot(x, a, color=BLUE,   lw=1.1, label="rebuilt from CRSP", zorder=3)
     ax.set_yscale("log"); ax.set_title(name)
     ax.grid(axis="x", visible=False); ax.margins(x=0.02)
@@ -712,7 +715,7 @@ discrepancy is largest exactly when momentum itself moves most.
 ```{python}
 #| label: tbl-worst
 #| tbl-cap: "The eight months that carry the momentum difference."
-#| code-fold: true
+#| echo: false
 
 rows = []
 for _, r in worst.head(8).iterrows():
@@ -874,7 +877,8 @@ saved = pd.read_csv(OUT / "result1_windows.csv", index_col=0)
 assert saved.shape[0] == N_MATCHED, (saved.shape[0], N_MATCHED)
 for c in ["in_sample", "post_sample", "post_pub"]:
     np.testing.assert_allclose(saved[c].mean(), table[c].mean(), rtol=1e-10)
-print(f"verified against output/result1_windows.csv: {N_MATCHED} signals, three windows match")
+print(f"verified against output/result1_windows.csv: "
+      f"{N_MATCHED} signals, three windows match")
 ```
 
 # References {.unnumbered}

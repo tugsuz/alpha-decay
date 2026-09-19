@@ -1,8 +1,9 @@
 """
 alpha-decay, step 1: look at one anomaly, and mark the moment it became public.
 
-Two stages, on purpose. Run `inspect` first and READ the output -- you cannot make the
-decisions in DECISIONS.md without having seen the actual columns and date ranges.
+Two stages, on purpose. Run `inspect` first and read the output. The sample filters and
+the event-date convention are choices, and they cannot be made sensibly without having
+seen the actual column names and date ranges. paper/alpha-decay.qmd argues each of them.
 
     python 01_first_figure.py inspect
     python 01_first_figure.py figure
@@ -68,7 +69,7 @@ def load_doc() -> pd.DataFrame:
 
 
 def inspect() -> None:
-    """Print enough of the raw data that you can answer DECISIONS.md questions 1 and 2."""
+    """Print enough of the raw data to see what the sample and the event date can be."""
     rets = load_returns()
     doc = load_doc()
 
@@ -104,7 +105,7 @@ def inspect() -> None:
         print(f"\n!! '{DOC_NAME_COL}' or '{DOC_YEAR_COL}' not in SignalDoc columns above.")
         print("   Edit DOC_NAME_COL / DOC_YEAR_COL at the top of this script and rerun.")
 
-    print("\nNow open DECISIONS.md and answer questions 1 and 2.")
+    print("\nSection 2 of paper/alpha-decay.qmd argues the sample filters this implies.")
 
 
 def figure() -> None:
@@ -176,7 +177,7 @@ def figure() -> None:
           f"   ({100*(p3-p1)/abs(p1):+.0f}% vs period 1)")
     print("\nMcLean and Pontiff find roughly -26% for period 2 and -58% for period 3,")
     print("averaged over 97 anomalies. One signal is not 97 -- but this is the shape.")
-    print("\nNow answer DECISIONS.md questions 1 and 2 before you believe any of it.")
+    print("\nOne signal is not a result. 02_decay_panel.py does this across all of them.")
 
 
 if __name__ == "__main__":
