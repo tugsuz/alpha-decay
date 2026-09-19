@@ -11,9 +11,11 @@ causal inference, and empirical asset pricing.
 **Current work**
 
 - **[alpha-decay](https://github.com/tugsuz/alpha-decay)** — how fast a published equity
-  anomaly stops working once it is public. Three-window decay across the Chen–Zimmermann
-  signal universe, then a state-space model for the decay rate, half-life and long-run
-  floor of each signal. Python.
+  anomaly stops working once it is public. Across 189 signals in the Chen–Zimmermann
+  universe (1926–2024), long-short returns fall 45% after publication; the median signal
+  loses 53%. Panel regression with signal fixed effects and date-clustered standard errors,
+  cluster-robust covariance written from scratch. Next: a state-space model for the decay
+  rate, half-life and long-run floor of each signal. Python.
 - **[ECN726TermProject-Replication](https://github.com/tugsuz/ECN726TermProject-Replication)**
   — replication of an applied econometrics paper. Stata.
 
