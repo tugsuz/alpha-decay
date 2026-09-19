@@ -44,6 +44,26 @@ Requirements:
   openassetpricing.com. No WRDS subscription is needed to render this document — the CRSP
   section reads committed result files.
 
+## Publishing it
+
+```bash
+./paper/publish.sh
+git add docs && git commit -m "Publish the paper" && git push
+```
+
+That renders to `paper/_output/`, copies the single self-contained HTML to
+`docs/index.html` and drops a `.nojekyll` beside it. GitHub Pages serves `docs/` on the
+`main` branch at <https://tugsuz.github.io/alpha-decay/>, which is the link that belongs
+on a résumé or a LinkedIn profile — a recruiter who will not clone a repository will open
+a web page.
+
+Enable it once: repo **Settings → Pages → Source: Deploy from a branch → main → /docs**.
+
+The rendered HTML is committed. That is not how build artefacts are normally treated, and
+the reason is specific: the render needs the two Chen–Zimmermann files, which are not
+redistributable and so are not in the repository, so no CI job could rebuild the page.
+Committing the output is what makes the paper readable by someone who only has the link.
+
 ## The rule this document is built on
 
 **No number in the prose is typed by hand.** Every figure in the text is either computed

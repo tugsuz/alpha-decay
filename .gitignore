@@ -21,9 +21,14 @@ output/*
 # Script backups
 *.bak_*
 
-# Quarto build products. The .qmd is the source; the rendered HTML/PDF and the
+# Quarto build products. The .qmd is the source; the intermediate render and the
 # generated notebook are not committed.
 paper/_output/
 paper/.quarto/
 paper/*.ipynb
 .quarto/
+
+# docs/ is NOT ignored. It holds the single self-contained HTML that GitHub Pages
+# serves, produced by paper/publish.sh. Committing a build artefact is deliberate
+# here: the render needs the Chen-Zimmermann files, which are not redistributable
+# and so are not in the repo, which means no CI job could rebuild the page.

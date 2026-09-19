@@ -11,12 +11,16 @@ to the end of the current data.
 
 ![three-window decay](output/fig02_decay.png)
 
-> **The full write-up is in [`paper/alpha-decay.qmd`](paper/alpha-decay.qmd)** — the
-> question, the estimand, the estimator derived in LaTeX, the code that implements it,
-> the number, and the test the number has to survive, with maths and code interleaved.
-> `quarto render paper/alpha-decay.qmd` builds it. No number in its prose is typed by
-> hand: every one is computed by a chunk or read out of a file in `output/`, and the last
-> chunk fails the render if the document and the scripts ever disagree.
+> ### 📄 Read the paper: **<https://tugsuz.github.io/alpha-decay/>**
+>
+> The question, the estimand, the estimator derived in LaTeX, the code that implements
+> it, the number, and the test the number has to survive — maths and code interleaved,
+> the way the work was actually done. Source: [`paper/alpha-decay.qmd`](paper/alpha-decay.qmd);
+> `./paper/publish.sh` rebuilds it.
+>
+> No number in its prose is typed by hand. Every one is computed by a code chunk or read
+> out of a file in `output/`, and the last chunk fails the render if the document and the
+> scripts ever disagree.
 
 Between the 1980s and today, several hundred cross-sectional return predictors have been
 documented in the finance literature. If those edges are real risk premia, publication
