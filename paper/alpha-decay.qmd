@@ -17,10 +17,9 @@ abstract: |
 ---
 
 ::: {.callout-note appearance="simple"}
-**This document is the project, not a summary of it.** Every number in the prose is
-computed by a code chunk below or read out of a committed result file; none is typed by
-hand. The order is deliberate: the question, then the estimand, then the estimator
-written out, then the number, then the test that the number survives.
+**Every number in this document is computed, not typed.** Each figure in the prose comes
+from a code chunk below or from a committed result file, and the final chunk fails the
+render if the document and the analysis scripts ever disagree.
 
 Source: [`github.com/tugsuz/alpha-decay`](https://github.com/tugsuz/alpha-decay) ·
 [PDF](alpha-decay.pdf). Sections @sec-question through @sec-restriction need only the free
@@ -518,15 +517,13 @@ correlation between $\hat\beta_1$ and $\hat\beta_2$ is
 $\hat\beta_2$ alone.
 
 ::: {.callout-warning appearance="simple"}
-**The sentence not to write.** "Publication, not overfitting, is what kills the edge."
-The point estimates are consistent with it. The data do not support it at conventional
+**What the estimates do not license.** The point estimates are consistent with publication
+being the operative channel, but the data do not support that reading at conventional
 levels, and the three-window design as run here does not separate the arbitrage channel
 from the data-mining channel on this universe.
 
-What can be said: the post-publication decline is precisely estimated, the post-sample
-decline is not, and the difference between them is not sharp enough to claim. That is a
-weaker headline and a stronger piece of work, because the restriction was tested rather
-than eyeballed.
+What they do support: the post-publication decline is precisely estimated, the post-sample
+decline is not, and the difference between them is not sharp enough to claim.
 :::
 
 # How much of this rests on someone else's numbers? {#sec-rebuild}
@@ -734,11 +731,11 @@ company. @shumway1997 is the classic statement of how much the treatment of disa
 stocks matters.
 
 ::: {.callout-note appearance="simple"}
-**The line not crossed.** No screen variants were tried. Closing the remaining
-`{python} f"{abs(mg):.3f}"` %/month by searching filter combinations until the number
-matches would be curve-fitting the replication itself — the same behaviour this project
-exists to measure. The position without it is defensible: one signal reproduces exactly,
-the other reproduces to within sampling error.
+**Screen variants.** None were tried. The remaining `{python} f"{abs(mg):.3f}"` %/month
+could be closed by searching filter combinations until the rebuilt series matched the
+published one, but that is curve-fitting the replication, and it is the behaviour this
+paper sets out to measure. The comparison is reported as it came out: one signal
+reproduces exactly, the other to within sampling error.
 :::
 
 ## The bug this caught, and why correlation hid it {#sec-skip}
@@ -771,8 +768,7 @@ skip takes the long-short mean from `{python} f"{mean_skip:.3f}"` to
 to −0.009 %/month: the premium gone entirely.
 
 **And the correlation never flinched: `{python} f"{corr_noskip:.3f}"`, peaking at lag 0.**
-That is the lesson worth keeping. A correlation confirms that the wiring is right and the
-timing is right; it rules out a merge error or an off-by-one in the calendar. It says
+A correlation confirms that the wiring is right and the timing is right; it rules out a merge error or an off-by-one in the calendar. It says
 nothing about whether the *signal definition* is right, because a wrong window is still
 mostly the same portfolio. Only the level catches this.
 
