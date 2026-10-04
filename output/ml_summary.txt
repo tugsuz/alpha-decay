@@ -1,0 +1,45 @@
+STEP 5 --- predicting next month's long-short return across published signals
+==============================================================================
+test years 1995 to 2024, 47,974 signal-months, 212 signals; one refit per year, expanding window
+features: 27; validation: last 8 years of each training sample
+
+Out-of-sample R2 (%), pooled over all test rows:
+  model                        vs zero   vs own mean     0-3y    3-10y     10y+
+  zero forecast                  +0.00         -0.64    +0.00    +0.00    +0.00
+  own historical mean            +0.63         +0.00    +0.24    +0.38    +0.80
+  OLS                            +0.93         +0.29    +0.70    +0.50    +1.15
+  elastic net                    +0.85         +0.22    +0.73    +0.50    +1.03
+  gradient boosted trees         +0.51         -0.13    +0.76    -0.52    +0.94
+  neural net (16 units)          -0.20         -0.84    -0.60    -1.83    +0.58
+
+Diebold-Mariano t-statistics (positive: the model beats the benchmark):
+  OLS                        vs zero forecast          t = +0.48
+  OLS                        vs own historical mean    t = -0.16
+  elastic net                vs OLS                    t = -0.60
+  gradient boosted trees     vs OLS                    t = -0.08
+  neural net (16 units)      vs OLS                    t = -0.69
+  neural net (16 units)      vs gradient boosted trees t = -0.70
+  gradient boosted trees     vs zero forecast          t = +0.64
+  gradient boosted trees     vs own historical mean    t = -0.33
+
+Portfolios of signals, monthly, %:
+  portfolio                                                    mean    vol  Sharpe      t
+  own historical mean: top fifth minus bottom fifth           0.640  2.102    1.06   5.77
+  own historical mean: top fifth                              0.746  1.712    1.51   8.26
+  OLS: top fifth minus bottom fifth                           1.171  6.458    0.63   3.44
+  OLS: top fifth                                              1.028  3.664    0.97   5.32
+  elastic net: top fifth minus bottom fifth                   1.164  6.541    0.62   3.37
+  elastic net: top fifth                                      1.061  3.714    0.99   5.41
+  gradient boosted trees: top fifth minus bottom fifth        1.129  6.255    0.63   3.42
+  gradient boosted trees: top fifth                           0.939  3.692    0.88   4.82
+  neural net (16 units): top fifth minus bottom fifth         1.175  5.523    0.74   4.03
+  neural net (16 units): top fifth                            1.007  3.075    1.13   6.20
+  all published signals, equal-weighted                       0.386  0.996    1.34   7.35
+
+Permutation importance, rise in pooled test MSE when a group is shuffled:
+  own history                trees +0.3053   OLS +0.5545
+  construction               trees +0.0069   OLS -0.0069
+  event time                 trees +0.0001   OLS +0.0092
+  data type and journal      trees -0.0008   OLS +0.0028
+  market state               trees -0.0041   OLS -0.0024
+  original evidence          trees -0.0085   OLS +0.0006
