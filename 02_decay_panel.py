@@ -142,8 +142,8 @@ def panel_regression(long: pd.DataFrame) -> dict:
     others. Standard errors are clustered by DATE, because in any given month every
     long-short portfolio is exposed to the same market.
 
-    Written out in numpy rather than called from a library: the cluster-robust sandwich
-    is four lines, and the point of the exercise is to know what it does.
+    Written out in numpy: the cluster-robust sandwich is four lines, and the point of
+    the exercise is to know what it does.
     """
     d = long.copy()
     d["post_sample"] = (d["window"] == "2_post_sample").astype(float)

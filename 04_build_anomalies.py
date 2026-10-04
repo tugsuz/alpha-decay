@@ -59,7 +59,7 @@ WHAT THE RUN ACTUALLY FOUND, WHICH IS NOT WHAT THIS HEADER ORIGINALLY PREDICTED:
 
   Mom12m does not. The documented hold=3 gives 0.652 against a published 0.900; plain monthly
   rebalancing gives 0.791 and is closer. So the script reports every candidate convention
-  side by side and lets the level choose, rather than asserting that the documented one wins.
+  side by side and lets the level choose.
   The remaining -0.107 %/month is inside sampling error (t = -1.82) and is carried entirely by
   about sixty momentum-crash months. No screen variants are tried: searching filters until the
   number matches would be curve-fitting the replication itself.
@@ -109,8 +109,8 @@ def ym(mi) -> tuple[int, int]:
 def signal_size(df: pd.DataFrame) -> pd.Series:
     """Log market value of equity. SignalDoc: 'Log of monthly market value of equity'.
 
-    Uses mthcap rather than abs(prc)*shrout: CRSP's price is negative when it is a
-    bid-ask average rather than a trade, and mthcap already handles the sign and the
+    Uses mthcap, not abs(prc)*shrout: CRSP's price is negative when it is a bid-ask
+    average in place of a trade, and mthcap already handles the sign and the
     share-adjustment factors.
     """
     cap = pd.to_numeric(df["mthcap"], errors="coerce").astype("float64")

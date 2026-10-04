@@ -42,7 +42,7 @@ WHY THE QUERY LOOKS LIKE THIS -- read once, then you can defend every line of it
    roughly two thirds of that once and never again.
 
 4. mthcap IS THE MARKET CAP.  Do not compute abs(prc) * shrout yourself. CRSP's price
-   column is negative when it is a bid-ask average rather than a trade, and mthcap already
+   column is negative when it is a bid-ask average and not a trade, and mthcap already
    handles that, plus the share-adjustment factors.
 
 5. WHY PARQUET, BY DECADE.  A single 3-million-row query over a slow link is one thing that
