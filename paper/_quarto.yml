@@ -2,8 +2,26 @@ project:
   type: default
   output-dir: _output
 
-# Rendered artefacts are regenerated from the .qmd; only the source is committed.
-# `quarto render` writes into paper/_output/, which .gitignore excludes.
+# Rendered output goes to paper/_output/, which .gitignore excludes; publish.sh copies
+# the HTML and the PDF into docs/.
+
+# The abstract lives here so that the course profile (_quarto-course.yml) can replace
+# it. `quarto render alpha-decay.qmd --profile course` renders the paper without the
+# machine-learning section.
+abstract: |
+  Several hundred cross-sectional return predictors have been published since the 1980s.
+  We measure what happens to them after publication, using the 189 usable signals in the
+  Chen and Zimmermann universe through December 2024. Mean monthly long-short returns
+  fall 45 percent from the original sample window to the post-publication window, and
+  the median signal loses 53 percent. The increment attributable to publication itself,
+  over and above the decline that had already set in when the original sample ended, is
+  not statistically significant, so the design does not separate arbitrage from
+  selection in this universe. We rebuild two of the input series from security-level
+  CRSP data to check the dataset. A real-time forecasting exercise over 1995 to 2024
+  finds that next month's return on a published signal is weakly predictable, that
+  gradient boosted trees and a small neural network do no better than a linear
+  regression, and that the predictive content sits in the signal's own return history:
+  the publication clock adds nothing once that history is known.
 
 format:
   html:
@@ -12,7 +30,7 @@ format:
     toc-depth: 3
     toc-title: Contents
     number-sections: true
-    code-fold: show
+    code-fold: true
     code-summary: "code"
     code-tools: true
     code-line-numbers: false
@@ -28,7 +46,7 @@ format:
     format-links: false
   pdf:
     documentclass: article
-    pdf-engine: xelatex        # the author's name has a ğ in it
+    pdf-engine: xelatex        # the author's name needs a Unicode engine
     papersize: letter
     geometry:
       - margin=1in
@@ -38,6 +56,8 @@ format:
     fig-height: 3.8
     code-line-numbers: false
     code-overflow: wrap        # a long source line must wrap, not run off the page
+    callout-icon: false
+    echo: false              # the PDF reads as a paper; the code is on the HTML page
     keep-tex: false
 
 bibliography: references.bib

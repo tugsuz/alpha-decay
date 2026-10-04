@@ -1,0 +1,13 @@
+# Profile for the course version of the paper, without the machine-learning section:
+#   quarto render alpha-decay.qmd --profile course
+# Blocks marked `unless-profile="course"` in alpha-decay.qmd are dropped.
+abstract: |
+  Several hundred cross-sectional return predictors have been published since the 1980s.
+  We measure what happens to them after publication, using the 189 usable signals in the
+  Chen and Zimmermann universe through December 2024. Mean monthly long-short returns
+  fall 45 percent from the original sample window to the post-publication window, and
+  the median signal loses 53 percent. The increment attributable to publication itself,
+  over and above the decline that had already set in when the original sample ended, is
+  not statistically significant, so the design does not separate arbitrage from
+  selection in this universe. We rebuild two of the input series from security-level
+  CRSP data to check the dataset.
