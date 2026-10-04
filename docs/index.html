@@ -3093,13 +3093,13 @@ Table 5: The eight months that carry the momentum difference.
 </figure>
 </div>
 </div>
-<p>These months name themselves. March 2009 is the worst month on record for momentum and September 1939 is the rebound at the outbreak of war, momentum crashes in the sense of <span class="citation" data-cites="daniel2016">Daniel and Moskowitz (<a href="#ref-daniel2016" role="doc-biblioref">2016</a>)</span>, when past losers surge and the extreme deciles turn over violently. In those months a single imputed price, or one stock that delists inside a holding period, moves a bucket mean by percentage points, and two implementations of a decile sort part company. <span class="citation" data-cites="shumway1997">Shumway (<a href="#ref-shumway1997" role="doc-biblioref">1997</a>)</span> is the classic statement of how much the treatment of disappearing stocks matters.</p>
+<p>All eight fall between 1931 and 1943, in the momentum crashes and rebounds of the Depression and the war years, when past losers surge and the extreme deciles turn over violently <span class="citation" data-cites="daniel2016">(<a href="#ref-daniel2016" role="doc-biblioref">Daniel and Moskowitz 2016</a>)</span>. September 1939 is the rebound at the outbreak of war, and the 1932 and 1933 months are the largest momentum reversals on record. The post-war crash months rank lower: December 2008 is 14th by absolute gap and March 2009 is 17th. In months like these a single imputed price, or one stock that delists inside a holding period, moves a bucket mean by percentage points, and two implementations of a decile sort part company. <span class="citation" data-cites="shumway1997">Shumway (<a href="#ref-shumway1997" role="doc-biblioref">1997</a>)</span> is the classic statement of how much the treatment of disappearing stocks matters.</p>
 <p>We tried no screen variants. The remaining 0.107 percent a month could be closed by searching filter combinations until the rebuilt series matched the published one. That would be fitting the replication to its target, and it is the behaviour this paper sets out to measure. One signal reproduces exactly; the other reproduces to within sampling error.</p>
 </section>
 <section id="sec-skip" class="level2" data-number="5.4">
 <h2 data-number="5.4" class="anchored" data-anchor-id="sec-skip"><span class="header-section-number">5.4</span> A definition error that correlation did not catch</h2>
 <p><code>SignalDoc</code> defines <code>Mom12m</code> over “months t-12 and t-1”. Month <span class="math inline">\(t\)</span> is excluded, which is the <span class="math inline">\(k = 1\)</span> in <a href="#eq-mom" class="quarto-xref">Equation 5</a>. Our first implementation used <span class="math inline">\(m-11,\dots,m\)</span>, which pulls short-term reversal <span class="citation" data-cites="jegadeesh1990">(<a href="#ref-jegadeesh1990" role="doc-biblioref">Jegadeesh 1990</a>)</span> into a momentum signal. Last month’s return is negatively autocorrelated, so including it adds an effect of the opposite sign.</p>
-<div id="skip" class="cell" data-execution_count="18">
+<div id="skip" class="cell" data-execution_count="19">
 <details class="code-fold">
 <summary>code</summary>
 <div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># `mine` and `mine_noskip` both use the documented three-month holding period. They</span></span>
@@ -3123,7 +3123,7 @@ Table 5: The eight months that carry the momentum difference.
 <section id="information-set-and-panel" class="level2" data-number="6.1">
 <h2 data-number="6.1" class="anchored" data-anchor-id="information-set-and-panel"><span class="header-section-number">6.1</span> Information set and panel</h2>
 <p>One row is a signal in a month; the target is that signal’s long-short return next month. A forecaster in month <span class="math inline">\(t\)</span> knows which signals have been published (publication year strictly before the year of <span class="math inline">\(t\)</span>), each published signal’s documented sample window and the characteristics of its paper, and each published signal’s return history up to <span class="math inline">\(t\)</span>, including the months before the paper appeared, since a public recipe can be backfilled. The forecaster knows nothing about signals not yet published. A signal therefore enters the panel, for training and for testing, only in the years after its publication year. This is the whole of the no-look-ahead rule, and it removes most of the sample before 1995, when fewer than two dozen signals were public.</p>
-<div id="ml-load" class="cell" data-execution_count="19">
+<div id="ml-load" class="cell" data-execution_count="20">
 <details class="code-fold">
 <summary>read the committed results of 05_ml_panel.py</summary>
 <div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>r2   <span class="op">=</span> pd.read_csv(OUT <span class="op">/</span> <span class="st">&quot;ml_r2.csv&quot;</span>, index_col<span class="op">=</span><span class="dv">0</span>)</span>
@@ -3168,8 +3168,8 @@ R^2_{\mathrm{oos}} \;=\; 1 - \frac{\sum_{i,t}\bigl(r_{i,t+1} - \hat r_{i,t+1}\bi
 </section>
 <section id="results" class="level2" data-number="6.3">
 <h2 data-number="6.3" class="anchored" data-anchor-id="results"><span class="header-section-number">6.3</span> Results</h2>
-<div class="cell" data-execution_count="20">
-<div id="tbl-ml-r2" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="20">
+<div class="cell" data-execution_count="21">
+<div id="tbl-ml-r2" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="21">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-ml-r2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table 6: Out-of-sample R², in percent, 1995 to 2024. Columns 3 to 5 split the test rows by years since publication.
@@ -3251,7 +3251,7 @@ Table 6: Out-of-sample R², in percent, 1995 to 2024. Columns 3 to 5 split the 
 </figure>
 </div>
 </div>
-<div id="cell-fig-ml-r2" class="cell" data-execution_count="21">
+<div id="cell-fig-ml-r2" class="cell" data-execution_count="22">
 <details class="code-fold">
 <summary>code</summary>
 <div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="fl">6.4</span>, <span class="fl">3.3</span>))</span>
@@ -3289,8 +3289,8 @@ Figure 4: Out-of-sample R² against a zero forecast, pooled over all test rows.
 <p>The numbers are small. The best model, OLS, explains 0.93 percent of next month’s variation, and the own-mean benchmark alone explains 0.63 percent. This is the order of magnitude <span class="citation" data-cites="gu2020">Gu, Kelly, and Xiu (<a href="#ref-gu2020" role="doc-biblioref">2020</a>)</span> report for individual stocks at the monthly horizon; monthly long-short returns are mostly noise.</p>
 <p>The flexible models do not beat the linear one. Against the own-mean benchmark OLS adds 0.29 percent, the trees -0.13 percent and the network -0.84 percent. None of the differences is distinguishable from zero: the Diebold-Mariano statistic for OLS against the own mean is -0.16, for the trees against OLS -0.08, and for the network against OLS -0.69. On this panel a model that can represent interactions and nonlinearities finds none worth having.</p>
 <p>Predictability does not fall with age. The <span class="math inline">\(R^2\)</span> is as high for signals more than ten years past publication as for signals in their first three years. Whatever is predictable about a published signal’s next return is still predictable long after the paper.</p>
-<div class="cell" data-execution_count="22">
-<div id="tbl-ml-imp" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="22">
+<div class="cell" data-execution_count="23">
+<div id="tbl-ml-imp" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="23">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-ml-imp-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table 7: Permutation importance: the rise in pooled test mean squared error when a group of features is shuffled within each test year.
@@ -3347,7 +3347,7 @@ Table 7: Permutation importance: the rise in pooled test mean squared error whe
 </section>
 <section id="the-decay-curve-conditional-and-unconditional" class="level2" data-number="6.4">
 <h2 data-number="6.4" class="anchored" data-anchor-id="the-decay-curve-conditional-and-unconditional"><span class="header-section-number">6.4</span> The decay curve, conditional and unconditional</h2>
-<div id="cell-fig-ml-decay" class="cell" data-execution_count="23">
+<div id="cell-fig-ml-decay" class="cell" data-execution_count="24">
 <details class="code-fold">
 <summary>code</summary>
 <div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>raw <span class="op">=</span> curve.dropna(subset<span class="op">=</span>[<span class="st">&quot;mean&quot;</span>])</span>
@@ -3387,8 +3387,8 @@ Figure 5: Long-short return against years since publication. Dots: mean return 
 </section>
 <section id="choosing-among-published-signals" class="level2" data-number="6.5">
 <h2 data-number="6.5" class="anchored" data-anchor-id="choosing-among-published-signals"><span class="header-section-number">6.5</span> Choosing among published signals</h2>
-<div class="cell" data-execution_count="25">
-<div id="tbl-ml-port" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="25">
+<div class="cell" data-execution_count="26">
+<div id="tbl-ml-port" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="26">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-ml-port-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table 8: Portfolios formed each month from the published signals, 1995 to 2024. Monthly returns in percent; Sharpe ratios annualised.
@@ -3497,7 +3497,7 @@ Table 8: Portfolios formed each month from the published signals, 1995 to 2024.
 </figure>
 </div>
 </div>
-<div id="cell-fig-ml-port" class="cell" data-execution_count="26">
+<div id="cell-fig-ml-port" class="cell" data-execution_count="27">
 <details class="code-fold">
 <summary>code</summary>
 <div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="fl">6.6</span>, <span class="fl">3.8</span>))</span>
@@ -3585,7 +3585,7 @@ r_t = \alpha_t + \varepsilon_t, \qquad
 <span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="co"># The version without the machine-learning section:</span></span>
 <span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="ex">quarto</span> render paper/alpha-decay.qmd <span class="at">--profile</span> course</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div id="verify" class="cell" data-execution_count="28">
+<div id="verify" class="cell" data-execution_count="29">
 <details class="code-fold">
 <summary>code</summary>
 <div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># The three-window means recomputed here must match the ones 02_decay_panel.py wrote.</span></span>

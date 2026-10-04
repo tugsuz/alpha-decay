@@ -717,13 +717,24 @@ Markdown("| Month | rebuilt | published | difference |\n|---|---:|---:|---:|\n"
          + "\n".join(rows))
 ```
 
-These months name themselves. March 2009 is the worst month on record for momentum and
-September 1939 is the rebound at the outbreak of war, momentum crashes in the sense of
-@daniel2016, when past losers surge and the extreme deciles turn over violently. In those
-months a single imputed price, or one stock that delists inside a holding period, moves a
-bucket mean by percentage points, and two implementations of a decile sort part company.
-@shumway1997 is the classic statement of how much the treatment of disappearing stocks
-matters.
+```{python}
+#| label: gap-ranks
+#| echo: false
+
+rk = o["gap"].abs().rank(ascending=False)
+rank_of = lambda y, m: int(rk[(o["year"] == y) & (o["mi"] % 12 == m % 12)].iloc[0])
+r_2008_12, r_2009_03 = rank_of(2008, 12), rank_of(2009, 3)
+```
+
+All eight fall between 1931 and 1943, in the momentum crashes and rebounds of the
+Depression and the war years, when past losers surge and the extreme deciles turn over
+violently [@daniel2016]. September 1939 is the rebound at the outbreak of war, and the
+1932 and 1933 months are the largest momentum reversals on record. The post-war crash
+months rank lower: December 2008 is `{python} r_2008_12`th by absolute gap and March 2009
+is `{python} r_2009_03`th. In months like these a single imputed price, or one stock that
+delists inside a holding period, moves a bucket mean by percentage points, and two
+implementations of a decile sort part company. @shumway1997 is the classic statement of
+how much the treatment of disappearing stocks matters.
 
 We tried no screen variants. The remaining `{python} f"{abs(mg):.3f}"` percent a month
 could be closed by searching filter combinations until the rebuilt series matched the
