@@ -76,7 +76,7 @@ LAST_YEAR = 2025
 TABLE = "contrib.global_factor"
 
 ID_COLUMNS = ["id", "eom", "permno", "gvkey", "size_grp", "me", "prc", "ret_exc",
-              "ret_exc_lead1m", "market_equity", "dolvol_126d", "bidaskhl_21d"]
+              "ret_exc_lead1m", "market_equity", "dolvol_126d", "bidaskhl_21d", "source_crsp"]
 
 SCREEN = """
         excntry     = 'USA'
@@ -207,9 +207,39 @@ def pull_year(db, year: int, cols: list[str]) -> None:
     print(f"  {year}  {len(df):>8,} rows   {out.stat().st_size/1e6:6.1f} MB   {time.time()-t0:5.1f}s")
 
 
+def add_columns(db, year: int, cols: list[str]) -> None:
+    """Pull `cols` for one year and add them to the cached file, keyed on (id, eom).
+    For columns added to ID_COLUMNS after the first pull; a full re-pull is not needed."""
+    out = CHUNKS / f"jkp_us_{year}.parquet"
+    if not out.exists():
+        print(f"  {year}  no cached file, skipping")
+        return
+    have = pd.read_parquet(out)
+    todo = [c for c in cols if c not in have.columns]
+    if not todo:
+        print(f"  {year}  already has {', '.join(cols)}")
+        return
+    t0 = time.time()
+    new = db.raw_sql(f"""
+        SELECT id, eom, {", ".join(todo)}
+        FROM {TABLE}
+        WHERE {SCREEN}
+          AND eom BETWEEN '{year}-01-01' AND '{year}-12-31'
+    """, date_cols=["eom"])
+    new["id"] = pd.to_numeric(new["id"], errors="coerce").astype("Int64")
+    for c in todo:
+        new[c] = pd.to_numeric(new[c], errors="coerce").astype(np.float32)
+    merged = have.merge(new.drop_duplicates(["id", "eom"]), on=["id", "eom"], how="left")
+    assert len(merged) == len(have), year
+    merged.to_parquet(out, index=False)
+    print(f"  {year}  added {', '.join(todo)}: {new[todo[0]].notna().mean():.3f} non-missing   {time.time()-t0:4.1f}s")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="columns, counts and a one-month profile")
+    ap.add_argument("--add-columns", default=None,
+                    help="comma-separated columns to pull into the existing year files, e.g. source_crsp")
     ap.add_argument("--first", type=int, default=FIRST_YEAR)
     ap.add_argument("--last", type=int, default=LAST_YEAR)
     args = ap.parse_args()
@@ -224,6 +254,15 @@ def main() -> None:
     try:
         if args.check:
             check(db)
+            return
+        if args.add_columns:
+            cols = [c for c in args.add_columns.split(",") if c]
+            avail = set(table_columns(db)["column_name"])
+            bad = [c for c in cols if c not in avail]
+            if bad:
+                sys.exit(f"not in {TABLE}: {', '.join(bad)}")
+            for year in range(args.first, args.last + 1):
+                add_columns(db, year, cols)
             return
         have, missing = select_list(set(table_columns(db)["column_name"]))
         if missing:
