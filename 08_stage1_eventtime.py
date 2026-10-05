@@ -28,6 +28,14 @@ bins, the five years before publication being the reference.
 Importance is used two ways: in units of mean squared error (scaled by 1e4), and as a
 share of the year's total positive importance, which removes the level differences
 between years.
+
+A caveat that belongs with the table. Publication dates are staggered, so this is a
+two-way fixed effects event study, and when the effect differs across publication
+cohorts the binned coefficients mix clean comparisons with comparisons that use
+already-published characteristics as controls (Goodman-Bacon 2021; Sun and Abraham
+2021). The table here is the first pass. A Sun-Abraham interaction-weighted version, or
+a stacked regression with one clean window per cohort, is the planned robustness check
+once the first results are in.
 --------------------------------------------------------------------------------------
 """
 
