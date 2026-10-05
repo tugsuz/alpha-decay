@@ -5,6 +5,7 @@ without look-ahead in the choice of characteristics.
     source ~/venvs/wrds/bin/activate
     cd ~/code/alpha-decay
     python 07_stage1_models.py --synthetic --smoke      # a few minutes, no data needed
+    python 07_stage1_models.py --synthetic --smoke --rebuild-panel   # after changing the panel code
     python 07_stage1_models.py --timing                 # one year, NN3 on cpu and on mps
     python 07_stage1_models.py --every 2                # first pass, refit every other year
     python 07_stage1_models.py                          # annual refit, 1995 to 2024
@@ -38,6 +39,12 @@ the one that was early-stopped or selected on the validation years (Gu, Kelly an
 Models: OLS with a Huber loss, elastic net, principal-component regression, partial least
 squares, gradient boosted trees, and feed-forward networks with one to three hidden layers
 (32, 16, 8 units), each an average over five seeds.
+
+Two worker processes. LightGBM links Homebrew's libomp and torch ships its own OpenMP
+runtime; loaded into one process they deadlock on the first network. So the script runs
+the tree-and-linear models in one child process and the networks in another, each
+importing only what it needs, and merges the forecasts year by year. The ranked panel is
+built once and cached in data/stage1/ so the second worker does not rank again.
 
 Outputs: out-of-sample R2 against a zero forecast, pooled and by year; Diebold-Mariano
 statistics on monthly cross-sectional loss differences with a Newey-West variance; decile
@@ -82,16 +89,14 @@ MODELS = ["huber", "enet", "pcr", "pls", "gbrt", "nn1", "nn2", "nn3"]
 IMPORTANCE_MODELS = ["huber", "gbrt", "nn3"]
 ID_COLS = ["id", "eom", "size_grp", "me", "ret_exc_lead1m", "bidaskhl_21d"]
 
-try:
-    import lightgbm as lgb
-    HAVE_LGB = True
-except ModuleNotFoundError:
-    HAVE_LGB = False
-try:
-    import torch
-    HAVE_TORCH = True
-except ModuleNotFoundError:
-    HAVE_TORCH = False
+import importlib.util
+import json
+import os
+import subprocess
+
+HAVE_LGB = importlib.util.find_spec("lightgbm") is not None
+HAVE_TORCH = importlib.util.find_spec("torch") is not None
+NN_MODELS = ["nn1", "nn2", "nn3"]
 
 
 # ---------------------------------------------------------------------------------
@@ -153,24 +158,45 @@ def private_files():
 # ---------------------------------------------------------------------------------
 
 def load_panel(chars: List[str], first: int, last: int,
-               synthetic: bool = False) -> Tuple[pd.DataFrame, np.ndarray, List[str]]:
-    """Return (meta, X, cols): one row per stock-month, X the ranked features."""
+               synthetic: bool = False, rebuild: bool = False) -> Tuple[pd.DataFrame, np.ndarray, List[str]]:
+    """Return (meta, X, cols): one row per stock-month, X the ranked features.
+
+    The ranked panel is cached in data/stage1 so the two worker processes rank once."""
+    PRIVATE.mkdir(parents=True, exist_ok=True)
+    tag = "synthetic" if synthetic else "jkp"
+    manifest = PRIVATE / f"panel_{tag}.json"
+    xfile, mfile = PRIVATE / f"panel_{tag}_X.npy", PRIVATE / f"panel_{tag}_meta.parquet"
+    want = {"first": first, "last": last}
+    if not rebuild and manifest.exists() and xfile.exists():
+        m = json.loads(manifest.read_text())
+        if m.get("first") == first and m.get("last") == last:
+            meta = load_private(pred_path_like(mfile))
+            meta["eom"] = pd.to_datetime(meta["eom"])
+            meta["target_month"] = pd.PeriodIndex(meta["target_month"], freq="M")
+            return meta, np.load(xfile), m["cols"]
     if synthetic:
-        return synthetic_panel(chars, first, last)
-    files = sorted(CHUNKS.glob("jkp_us_*.parquet"))
-    files = [f for f in files if first <= int(f.stem.split("_")[-1]) <= last]
-    if not files:
-        sys.exit(f"no year files in {CHUNKS}; run 06_jkp_pull.py first")
-    avail = [c for c in chars if c in pd.read_parquet(files[0]).columns]
-    metas, blocks = [], []
-    for f in files:
-        df = pd.read_parquet(f, columns=ID_COLS + avail)
-        blocks.append(rank_transform_panel(df, avail).to_numpy())
-        metas.append(df[ID_COLS])
-        print(f"  ranked {f.stem}: {len(df):,} rows", flush=True)
-    meta = pd.concat(metas, ignore_index=True)
-    X = np.vstack(blocks)
-    return prepare_meta(meta), X, avail
+        meta, X, cols = synthetic_panel(chars, first, last)
+    else:
+        files = sorted(CHUNKS.glob("jkp_us_*.parquet"))
+        files = [f for f in files if first <= int(f.stem.split("_")[-1]) <= last]
+        if not files:
+            sys.exit(f"no year files in {CHUNKS}; run 06_jkp_pull.py first")
+        avail = [c for c in chars if c in pd.read_parquet(files[0]).columns]
+        metas, blocks = [], []
+        for f in files:
+            df = pd.read_parquet(f, columns=ID_COLS + avail)
+            blocks.append(rank_transform_panel(df, avail).to_numpy())
+            metas.append(df[ID_COLS])
+            print(f"  ranked {f.stem}: {len(df):,} rows", flush=True)
+        meta, X, cols = prepare_meta(pd.concat(metas, ignore_index=True)), np.vstack(blocks), avail
+    np.save(xfile, X)
+    save_private(meta.assign(target_month=meta["target_month"].astype(str)), mfile)
+    manifest.write_text(json.dumps({**want, "cols": cols}))
+    return meta, X, cols
+
+
+def pred_path_like(p: Path) -> Path:
+    return p if p.exists() or not p.with_suffix(".csv").exists() else p.with_suffix(".csv")
 
 
 def prepare_meta(meta: pd.DataFrame) -> pd.DataFrame:
@@ -324,6 +350,7 @@ def fit_gbrt(Xtr, ytr, Xva, yva, smoke=False):
     grid = [(2, 0.1)] if smoke else [(d, lr) for d in (2, 3) for lr in (0.05, 0.1)]
     for depth, lr in grid:
         if HAVE_LGB:
+            import lightgbm as lgb
             m = lgb.LGBMRegressor(max_depth=depth, num_leaves=2 ** depth, learning_rate=lr,
                                   n_estimators=50 if smoke else 1000, subsample=0.5,
                                   subsample_freq=1, colsample_bytree=0.5,
@@ -355,15 +382,22 @@ def nn_layers(name: str) -> List[int]:
 
 def fit_nn_torch(Xtr, ytr, Xva, yva, layers, device, smoke=False, seeds=SEEDS):
     """Feed-forward net: ReLU, batch normalisation, Adam, L1 penalty, early stopping on
-    the validation loss, averaged over seeds."""
+    the validation loss, averaged over seeds.
+
+    The target is divided by its training standard deviation inside this function and
+    the forecasts are multiplied back, so the loss is on a unit scale whatever the
+    return units are; the output layer starts near zero, so an untrained net forecasts
+    the mean, not noise of its own."""
     import torch
     import torch.nn as nn
+    torch.set_num_threads(max(1, os.cpu_count() or 1))
 
     dev = torch.device(device)
+    y_sd = float(ytr.std()) or 1.0
     Xt = torch.from_numpy(np.ascontiguousarray(Xtr)).to(dev)
-    yt = torch.from_numpy(np.ascontiguousarray(ytr)).to(dev)
+    yt = torch.from_numpy(np.ascontiguousarray(ytr / y_sd)).to(dev)
     Xv = torch.from_numpy(np.ascontiguousarray(Xva)).to(dev)
-    yv = torch.from_numpy(np.ascontiguousarray(yva)).to(dev)
+    yv = torch.from_numpy(np.ascontiguousarray(yva / y_sd)).to(dev)
 
     def build(seed):
         torch.manual_seed(seed)
@@ -371,7 +405,11 @@ def fit_nn_torch(Xtr, ytr, Xva, yva, layers, device, smoke=False, seeds=SEEDS):
         for h in layers:
             mods += [nn.Linear(d, h), nn.BatchNorm1d(h), nn.ReLU()]
             d = h
-        mods.append(nn.Linear(d, 1))
+        head = nn.Linear(d, 1)
+        with torch.no_grad():
+            head.weight.mul_(0.01)
+            head.bias.zero_()
+        mods.append(head)
         return nn.Sequential(*mods).to(dev)
 
     def train(seed, l1):
@@ -380,11 +418,14 @@ def fit_nn_torch(Xtr, ytr, Xva, yva, layers, device, smoke=False, seeds=SEEDS):
         best_v, best_state, bad = np.inf, None, 0
         n = len(Xt)
         g = torch.Generator(device="cpu").manual_seed(seed)
-        for epoch in range(3 if smoke else MAX_EPOCHS):
+        epochs = 10 if smoke else MAX_EPOCHS
+        for epoch in range(epochs):
             net.train()
             perm = torch.randperm(n, generator=g).to(dev)
             for i in range(0, n, BATCH):
                 b = perm[i:i + BATCH]
+                if len(b) < 2:
+                    continue
                 opt.zero_grad()
                 pred = net(Xt[b]).squeeze(1)
                 loss = ((pred - yt[b]) ** 2).mean()
@@ -409,8 +450,8 @@ def fit_nn_torch(Xtr, ytr, Xva, yva, layers, device, smoke=False, seeds=SEEDS):
     best = None
     for l1 in ([1e-5] if smoke else [1e-5, 1e-4]):
         nets, vs, eps = [], [], []
-        for s in range(1 if smoke else seeds):
-            net, v, ep = train(s, l1)
+        for s_ in range(1 if smoke else seeds):
+            net, v, ep = train(s_, l1)
             nets.append(net); vs.append(v); eps.append(ep)
         with torch.no_grad():
             ens = torch.stack([n_(Xv).squeeze(1) for n_ in nets]).mean(0)
@@ -425,7 +466,7 @@ def fit_nn_torch(Xtr, ytr, Xva, yva, layers, device, smoke=False, seeds=SEEDS):
             out = []
             for i in range(0, len(Zt), 200000):
                 out.append(torch.stack([n_(Zt[i:i + 200000]).squeeze(1) for n_ in nets]).mean(0).cpu())
-        return torch.cat(out).numpy().astype(np.float32)
+        return (torch.cat(out).numpy() * y_sd).astype(np.float32)
     return predict, {"l1": l1, "epochs": eps}
 
 
@@ -433,6 +474,8 @@ def fit_nn_sklearn(Xtr, ytr, Xva, yva, layers, smoke=False, seeds=SEEDS):
     """Fallback when torch is not installed: early stopping on the validation years is
     done by hand through partial_fit over epochs."""
     from sklearn.neural_network import MLPRegressor
+    y_sd = float(ytr.std()) or 1.0
+    ytr, yva = ytr / y_sd, yva / y_sd
     best = None
     for alpha in ([1e-4] if smoke else [1e-4, 1e-3]):
         nets, eps = [], []
@@ -441,7 +484,7 @@ def fit_nn_sklearn(Xtr, ytr, Xva, yva, layers, smoke=False, seeds=SEEDS):
                              learning_rate_init=1e-3, max_iter=1, warm_start=True,
                              random_state=s)
             best_v, bad, best_coef = np.inf, 0, None
-            for ep in range(3 if smoke else MAX_EPOCHS):
+            for ep in range(10 if smoke else MAX_EPOCHS):
                 m.fit(Xtr, ytr)
                 v = mse(yva, m.predict(Xva))
                 if v < best_v - 1e-7:
@@ -457,7 +500,7 @@ def fit_nn_sklearn(Xtr, ytr, Xva, yva, layers, smoke=False, seeds=SEEDS):
         if best is None or v_ens < best[0]:
             best = (v_ens, alpha, nets, eps)
     _, alpha, nets, eps = best
-    return (lambda Z: np.mean([n_.predict(Z) for n_ in nets], axis=0).astype(np.float32)), \
+    return (lambda Z: (y_sd * np.mean([n_.predict(Z) for n_ in nets], axis=0)).astype(np.float32)), \
         {"alpha": alpha, "epochs": eps}
 
 
@@ -494,7 +537,13 @@ def splits(meta: pd.DataFrame, y: int):
     return tr, va, te
 
 
+def pred_path(y):
+    p = PRIVATE / f"preds_{y}.parquet"
+    return p if p.exists() or not p.with_suffix(".csv").exists() else p.with_suffix(".csv")
+
+
 def run(meta, X, cols, chars, args):
+    """Fit args.models for every test year and merge the forecasts into data/stage1."""
     PRIVATE.mkdir(parents=True, exist_ok=True)
     pub = chars.set_index("characteristic")["pub_year"]
     col_idx = {c: i for i, c in enumerate(cols)}
@@ -503,8 +552,10 @@ def run(meta, X, cols, chars, args):
     valid = ~np.isnan(meta["y"].to_numpy())
 
     for y in years:
-        pred_file = PRIVATE / f"preds_{y}.parquet"
-        if args.skip_done and (pred_file.exists() or pred_file.with_suffix(".csv").exists()):
+        pf = pred_path(y)
+        existing = load_private(pf) if pf.exists() else None
+        wanted = [f"{m}_{s_}" for m in args.models for s_ in ("public", "full")]
+        if args.skip_done and existing is not None and all(c in existing.columns for c in wanted):
             print(f"{y}: forecasts on disk, skipping")
             continue
         tr, va, te = splits(meta, y)
@@ -514,6 +565,7 @@ def run(meta, X, cols, chars, args):
         sets = {"public": [c for c in cols if pub[c] < y], "full": list(cols)}
         out = meta.loc[te, ["id", "eom", "target_month", "size_grp", "me", "half_spread", "y"]].copy()
         ytr, yva = meta.loc[tr, "y"].to_numpy(), meta.loc[va, "y"].to_numpy()
+        y_te = out["y"].to_numpy()
         print(f"{y}: train {tr.sum():,} val {va.sum():,} test {te.sum():,} rows; "
               f"public set {len(sets['public'])} of {len(cols)}", flush=True)
         for set_name, scols in sets.items():
@@ -522,31 +574,43 @@ def run(meta, X, cols, chars, args):
             for name in args.models:
                 t0 = time.time()
                 predict, setting = fit_model(name, Xtr, ytr, Xva, yva, args.device, args.smoke)
-                out[f"{name}_{set_name}"] = predict(Xte)
+                p = predict(Xte)
+                out[f"{name}_{set_name}"] = p
                 dt = time.time() - t0
-                tuning.append({"year": y, "set": set_name, "model": name, "setting": str(setting)})
+                # scale check: forecasts should be far less dispersed than returns; a ratio
+                # near or above one means the model is fitting noise or is mis-scaled
+                ratio = float(np.std(p) / (np.std(y_te) or 1.0))
+                tuning.append({"year": y, "set": set_name, "model": name, "setting": str(setting),
+                               "pred_sd_over_y_sd": ratio})
                 timing.append({"year": y, "set": set_name, "model": name, "seconds": dt})
-                print(f"   {set_name:<6} {name:<6} {dt:6.0f}s  {setting}", flush=True)
-                # permutation importance of every characteristic, full model only
+                print(f"   {set_name:<6} {name:<6} {dt:6.0f}s  sd ratio {ratio:.3f}  {setting}", flush=True)
                 if set_name == "full" and name in args.importance_models:
-                    base = mse(out["y"].to_numpy(), out[f"{name}_{set_name}"].to_numpy())
+                    base = mse(y_te, p)
                     rng = np.random.default_rng(y)
                     for k, c in enumerate(scols):
                         Zp = Xte.copy()
                         Zp[:, k] = rng.permutation(Zp[:, k])
                         imp_rows.append({"year": y, "model": name, "characteristic": c,
-                                         "mse_increase": mse(out["y"].to_numpy(), predict(Zp)) - base})
+                                         "mse_increase": mse(y_te, predict(Zp)) - base})
             del Xtr, Xva, Xte
-        save_private(out, pred_file)
-        pd.DataFrame(tuning).to_csv(OUT / "stage1_tuning.csv", index=False)
-        pd.DataFrame(timing).to_csv(OUT / "stage1_timing.csv", index=False)
+        if existing is not None:
+            keep = [c for c in existing.columns if c not in out.columns]
+            out = pd.concat([out.reset_index(drop=True), existing[keep].reset_index(drop=True)], axis=1)
+        save_private(out, PRIVATE / f"preds_{y}.parquet")
+        merge_csv(OUT / "stage1_tuning.csv", pd.DataFrame(tuning), ["year", "set", "model"])
+        merge_csv(OUT / "stage1_timing.csv", pd.DataFrame(timing), ["year", "set", "model"])
         if imp_rows:
-            imp = pd.DataFrame(imp_rows)
-            old = OUT / "stage1_importance.csv"
-            if old.exists() and args.skip_done:
-                prev = pd.read_csv(old)
-                imp = pd.concat([prev[~prev["year"].isin(imp["year"])], imp], ignore_index=True)
-            imp.to_csv(old, index=False)
+            merge_csv(OUT / "stage1_importance.csv", pd.DataFrame(imp_rows), ["year", "model"])
+
+
+def merge_csv(path, new, keys):
+    """Replace the rows of `path` that share `keys` with `new`, keep the rest."""
+    if path.exists():
+        prev = pd.read_csv(path)
+        k_new = set(map(tuple, new[keys].astype(str).to_numpy()))
+        mask = [tuple(r) not in k_new for r in prev[keys].astype(str).to_numpy()]
+        new = pd.concat([prev[mask], new], ignore_index=True)
+    new.to_csv(path, index=False)
 
 
 # ---------------------------------------------------------------------------------
@@ -691,43 +755,75 @@ def timing_run(meta, X, cols, args):
         print(f"  nn3, one seed, {tr.sum():,} training rows, device {dev}: {time.time()-t0:.0f}s")
 
 
+def worker_groups(models):
+    """The two groups that must not share a process."""
+    nets = [m for m in models if m in NN_MODELS]
+    others = [m for m in models if m not in NN_MODELS]
+    return [g for g in (others, nets) if g]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--synthetic", action="store_true", help="made-up panel, no WRDS data")
-    ap.add_argument("--smoke", action="store_true", help="tiny grids, few epochs, three test years")
+    ap.add_argument("--smoke", action="store_true",
+                    help="tiny grids, few epochs, test years 2005 to 2007 (public set 58 to 70 of 153)")
     ap.add_argument("--timing", action="store_true", help="time nn3 on cpu and mps for one year")
     ap.add_argument("--eval-only", action="store_true", help="tables from saved forecasts only")
     ap.add_argument("--skip-done", action="store_true", help="skip test years whose forecasts are already on disk")
+    ap.add_argument("--rebuild-panel", action="store_true", help="ignore the cached ranked panel")
     ap.add_argument("--every", type=int, default=1, help="refit every N test years")
-    ap.add_argument("--first-test", type=int, default=FIRST_TEST)
-    ap.add_argument("--last-test", type=int, default=LAST_TEST)
+    ap.add_argument("--first-test", type=int, default=None)
+    ap.add_argument("--last-test", type=int, default=None)
     ap.add_argument("--models", default=",".join(MODELS))
     ap.add_argument("--importance-models", default=",".join(IMPORTANCE_MODELS))
     ap.add_argument("--device", default="cpu", help="cpu or mps, for the networks")
+    ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
-    args.models = args.models.split(",")
+    args.models = [m for m in args.models.split(",") if m]
     args.importance_models = args.importance_models.split(",")
+    if args.first_test is None:
+        args.first_test = 2005 if args.smoke else FIRST_TEST
+    if args.last_test is None:
+        args.last_test = 2007 if args.smoke else LAST_TEST
     OUT.mkdir(exist_ok=True)
 
     if args.eval_only:
         evaluate(args)
         return
 
+    if args.timing:                       # timing needs torch only, so it stays in-process
+        args.models = [m for m in args.models if m in NN_MODELS] or ["nn3"]
+    groups = worker_groups(args.models)
+    if not args.worker and len(groups) > 1:
+        # one child per group, so LightGBM's OpenMP and torch's never meet in one process
+        for g in groups:
+            cmd = [sys.executable, str(Path(__file__).resolve()), "--worker", "--models", ",".join(g)]
+            for flag in ("synthetic", "smoke", "skip_done", "rebuild_panel"):
+                if getattr(args, flag):
+                    cmd.append("--" + flag.replace("_", "-"))
+            cmd += ["--every", str(args.every), "--first-test", str(args.first_test),
+                    "--last-test", str(args.last_test), "--device", args.device,
+                    "--importance-models", ",".join(args.importance_models)]
+            print(f"\n=== worker: {', '.join(g)} ===", flush=True)
+            subprocess.run(cmd, check=True)
+        evaluate(args)
+        return
+
     chars = characteristics()
-    if args.smoke:
-        args.first_test, args.last_test = args.last_test - 2, args.last_test
     first = FIRST_YEAR if not args.synthetic else args.first_test - 20
     t0 = time.time()
     meta, X, cols = load_panel(chars["characteristic"].tolist(), first, args.last_test,
-                               synthetic=args.synthetic)
+                               synthetic=args.synthetic, rebuild=args.rebuild_panel)
     print(f"panel: {len(meta):,} rows, {len(cols)} characteristics, "
           f"{meta['eom'].min():%Y-%m} to {meta['eom'].max():%Y-%m}  [{time.time()-t0:.0f}s]")
-    print(f"lightgbm: {HAVE_LGB}, torch: {HAVE_TORCH}, device: {args.device}")
+    print(f"models: {', '.join(args.models)}; lightgbm: {HAVE_LGB}, torch: {HAVE_TORCH}, device: {args.device}")
 
     if args.timing:
         timing_run(meta, X, cols, args)
         return
     run(meta, X, cols, chars[chars["characteristic"].isin(cols)], args)
+    if args.worker:
+        return
     evaluate(args)
 
 
