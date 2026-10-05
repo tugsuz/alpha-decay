@@ -2316,7 +2316,7 @@ window.Quarto = {
 <div>
   <div class="abstract">
     <div class="block-title">Abstract</div>
-    <p>Several hundred cross-sectional return predictors have been published since the 1980s. We measure what happens to them after publication, using the 189 usable signals in the Chen and Zimmermann universe through December 2024. Mean monthly long-short returns fall 45 percent from the original sample window to the post-publication window, and the median signal loses 53 percent. The increment attributable to publication itself, over and above the decline that had already set in when the original sample ended, is not statistically significant, so the design does not separate arbitrage from selection in this universe. We rebuild two of the input series from security-level CRSP data to check the dataset. A real-time forecasting exercise over 1995 to 2024 finds that next month’s return on a published signal is weakly predictable, that gradient boosted trees and a small neural network do no better than a linear regression, and that the predictive content sits in the signal’s own return history: the publication clock adds nothing once that history is known.</p>
+    <p>Several hundred cross-sectional return predictors have been published since the 1980s. We measure what happens to them after publication, using the 189 usable signals in the Chen and Zimmermann universe through December 2024. Mean monthly long-short returns fall 45 percent from the original sample window to the post-publication window, and the median signal loses 53 percent. The increment attributable to publication itself, over and above the decline that had already set in when the original sample ended, is not statistically significant, so the design does not separate arbitrage from selection in this universe. We rebuild two of the input series from security-level CRSP data to check the dataset. A real-time forecasting exercise over 1995 to 2024 finds that next month’s return on a published signal is weakly predictable, that no model beats another by a margin a test can distinguish, and that the predictive content sits in the signal’s own return history: the publication clock adds nothing once that history is known.</p>
   </div>
 </div>
 
@@ -2386,7 +2386,7 @@ window.Quarto = {
 <p>The same logic applies to signals found by machine learning. A model fitted to past returns is a published signal in everything but the journal. Once enough capital trades the same features through similar models, the return the model predicts is competed away in the same way. Published anomalies have one advantage as a laboratory: the date on which each became common knowledge is known, so the decay can be measured against it.</p>
 <p>What is known. <span class="citation" data-cites="mclean2016">McLean and Pontiff (<a href="#ref-mclean2016" role="doc-biblioref">2016</a>)</span> find, on 97 anomalies, that long-short returns are 26 percent lower after the original sample ends and 58 percent lower after publication, and they read the gap between those two numbers as the effect of publication itself. <span class="citation" data-cites="chen2023">Chen and Velikov (<a href="#ref-chen2023" role="doc-biblioref">2023</a>)</span> add trading costs and find that the average published anomaly earns about four basis points a month net after 2000. <span class="citation" data-cites="jacobs2020">Jacobs and Müller (<a href="#ref-jacobs2020" role="doc-biblioref">2020</a>)</span> find a reliable post-publication decline only in the United States. <span class="citation" data-cites="falck2022">Falck, Rej, and Thesmar (<a href="#ref-falck2022" role="doc-biblioref">2022</a>)</span> find that the year of publication alone explains a large share of how much a strategy’s Sharpe ratio falls out of sample.</p>
 <p>What this paper does. We re-measure post-publication decay on the <span class="citation" data-cites="chen2022">Chen and Zimmermann (<a href="#ref-chen2022" role="doc-biblioref">2022</a>)</span> universe, which covers 212 predictors through December 2024, about twice the McLean and Pontiff sample and a decade more data. Mean long-short returns fall 45 percent from the original sample window to the post-publication window, and the median signal loses 53 percent. We then test the restriction that separates the two explanations of the decline, arbitrage after publication and selection in the original sample, and we fail to reject it: the three-window design does not identify the channel in this universe. We rebuild two of the input series from security-level CRSP data as a check on the dataset everything else rests on.</p>
-<p>Finally we ask whether a forecaster standing in real time, knowing only the signals that had been published by then, could have picked the ones that would keep paying. The answer is modest. A linear regression earns an out-of-sample R² below one percent, gradient boosted trees and a small neural network do no better, and almost all of the predictive content sits in the signal’s own return history. Holding every published signal with equal weight earns a higher Sharpe ratio than any model-based selection.</p>
+<p>Finally we ask whether a forecaster standing in real time, knowing only the signals that had been published by then, could have picked the ones that would keep paying. The answer is modest. A linear regression and gradient boosted trees each earn an out-of-sample R² below one percent, no model beats another by a margin a test can distinguish, and almost all of the predictive content sits in the signal’s own return history. Holding every published signal with equal weight earns a higher Sharpe ratio than any model-based selection.</p>
 <p><a href="#sec-data" class="quarto-xref">Section 2</a> describes the data, <a href="#sec-design" class="quarto-xref">Section 3</a> the design and the estimator, <a href="#sec-result1" class="quarto-xref">Section 4</a> the results and the restriction test, <a href="#sec-rebuild" class="quarto-xref">Section 5</a> the CRSP rebuild<span>, <a href="#sec-ml" class="quarto-xref">Section 6</a> the forecasting exercise</span>. <a href="#sec-next" class="quarto-xref">Section 7</a> sets out what the design cannot do and what comes next.</p>
 </section>
 <section id="sec-data" class="level1" data-number="2">
@@ -3287,10 +3287,10 @@ Figure 4: Out-of-sample R² against a zero forecast, pooled over all test rows.
 </div>
 <p>Three things stand out in <a href="#tbl-ml-r2" class="quarto-xref">Table 6</a>.</p>
 <p>The numbers are small. The linear regression explains 0.84 percent of next month’s variation, the trees 0.88 percent, and the own-mean benchmark alone 0.62 percent. This is the order of magnitude <span class="citation" data-cites="gu2020">Gu, Kelly, and Xiu (<a href="#ref-gu2020" role="doc-biblioref">2020</a>)</span> report for individual stocks at the monthly horizon; monthly long-short returns are mostly noise.</p>
-<p>The flexible models do not beat the linear one. Against the own-mean benchmark OLS adds 0.23 percent, the trees 0.26 percent and the network -0.84 percent. None of the differences is distinguishable from zero: the Diebold-Mariano statistic for OLS against the own mean is -0.29, for the trees against OLS +0.42, and for the network against OLS -1.15. On this panel a model that can represent interactions and nonlinearities finds none worth having.</p>
+<p>No model beats another by a margin a test can distinguish. Against the own-mean benchmark OLS adds 0.23 percent, the trees 0.26 percent and the network -0.84 percent. The Diebold-Mariano statistic for OLS against the own mean is -0.29, for the trees against OLS +0.42, and for the network against OLS -1.15. The tree number also depends on the tuning path: holding any one of the four grid settings fixed through all thirty refits gives an <span class="math inline">\(R^2\)</span> between 0.70 and 0.93 percent, so the gap between the trees and the linear model is inside the range the trees cover on their own. (The fit uses no subsampling, so a setting fixes the result; seeds play no role.) On this panel a model that can represent interactions and nonlinearities finds none that a test can see.</p>
 <p>Predictability does not fall with age. The <span class="math inline">\(R^2\)</span> is as high for signals more than ten years past publication as for signals in their first three years. Whatever is predictable about a published signal’s next return is still predictable long after the paper.</p>
-<div class="cell" data-execution_count="23">
-<div id="tbl-ml-imp" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="23">
+<div class="cell" data-execution_count="24">
+<div id="tbl-ml-imp" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="24">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-ml-imp-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table 7: Permutation importance: the rise in pooled test mean squared error when a group of features is shuffled within each test year.
@@ -3347,7 +3347,7 @@ Table 7: Permutation importance: the rise in pooled test mean squared error whe
 </section>
 <section id="the-decay-curve-conditional-and-unconditional" class="level2" data-number="6.4">
 <h2 data-number="6.4" class="anchored" data-anchor-id="the-decay-curve-conditional-and-unconditional"><span class="header-section-number">6.4</span> The decay curve, conditional and unconditional</h2>
-<div id="cell-fig-ml-decay" class="cell" data-execution_count="25">
+<div id="cell-fig-ml-decay" class="cell" data-execution_count="26">
 <details class="code-fold">
 <summary>code</summary>
 <div class="sourceCode cell-code" id="cb16"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>raw <span class="op">=</span> curve.dropna(subset<span class="op">=</span>[<span class="st">&quot;mean&quot;</span>])</span>
@@ -3387,8 +3387,8 @@ Figure 5: Long-short return against years since publication. Dots: mean return 
 </section>
 <section id="choosing-among-published-signals" class="level2" data-number="6.5">
 <h2 data-number="6.5" class="anchored" data-anchor-id="choosing-among-published-signals"><span class="header-section-number">6.5</span> Choosing among published signals</h2>
-<div class="cell" data-execution_count="27">
-<div id="tbl-ml-port" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="27">
+<div class="cell" data-execution_count="28">
+<div id="tbl-ml-port" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="28">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-ml-port-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Table 8: Portfolios formed each month from the published signals, 1995 to 2024. Monthly returns in percent; Sharpe ratios annualised.
@@ -3497,7 +3497,7 @@ Table 8: Portfolios formed each month from the published signals, 1995 to 2024.
 </figure>
 </div>
 </div>
-<div id="cell-fig-ml-port" class="cell" data-execution_count="28">
+<div id="cell-fig-ml-port" class="cell" data-execution_count="29">
 <details class="code-fold">
 <summary>code</summary>
 <div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="fl">6.6</span>, <span class="fl">3.8</span>))</span>
@@ -3531,7 +3531,7 @@ Figure 6: Cumulative value of one dollar in the top fifth of published signals,
 </div>
 </div>
 <p><a href="#tbl-ml-port" class="quarto-xref">Table 8</a> is the allocator’s table. Holding every published signal with equal weight earns 0.38 percent a month at a volatility of 1.00, a Sharpe ratio of 1.31. Ranking signals by their own historical mean and holding the top fifth raises the mean to 0.71 and the Sharpe ratio to 1.36. Ranking by the OLS forecast raises the mean further, to 1.03, and doubles the volatility, so the Sharpe ratio falls to 0.94; the trees give 1.00 and 0.89. The models earn their higher mean by selecting volatile signals, and a mean-squared-error forecast of return has no reason to care about volatility. The long-short versions of these portfolios, which also short the bottom fifth, have the same character.</p>
-<p>Two cautions. These are portfolios of long-short portfolios and carry no trading costs; <span class="citation" data-cites="chen2023">Chen and Velikov (<a href="#ref-chen2023" role="doc-biblioref">2023</a>)</span> show how much of a published anomaly’s gross return the costs take. And the return to “the top fifth by own mean” is the return to persistence in the cross-section of published anomalies, which is a statement about the data, not a strategy we would expect to survive its own publication.</p>
+<p>Three cautions. These are portfolios of long-short portfolios and carry no trading costs; <span class="citation" data-cites="chen2023">Chen and Velikov (<a href="#ref-chen2023" role="doc-biblioref">2023</a>)</span> show how much of a published anomaly’s gross return the costs take. The return to “the top fifth by own mean” is the return to persistence in the cross-section of published anomalies, which is a statement about the data, not a strategy we would expect to survive its own publication. And the own-mean Sharpe ratio is sensitive to one detail of the universe rule: a signal published in year <span class="math inline">\(y-1\)</span> first enters in the December feature month of that year, which forecasts January <span class="math inline">\(y\)</span>. Those first-month rows, 189 in all, carry high historical means, are often selected into the top fifth, and earn little; with them the top-fifth Sharpe ratio is 1.36, and under a rule that admits a signal only from the following February it is 1.52.</p>
 </section>
 <section id="what-this-section-does-and-does-not-show" class="level2" data-number="6.6">
 <h2 data-number="6.6" class="anchored" data-anchor-id="what-this-section-does-and-does-not-show"><span class="header-section-number">6.6</span> What this section does and does not show</h2>
@@ -3585,7 +3585,7 @@ r_t = \alpha_t + \varepsilon_t, \qquad
 <span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="co"># The version without the machine-learning section:</span></span>
 <span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="ex">quarto</span> render paper/alpha-decay.qmd <span class="at">--profile</span> course</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div id="verify" class="cell" data-execution_count="30">
+<div id="verify" class="cell" data-execution_count="31">
 <details class="code-fold">
 <summary>code</summary>
 <div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="co"># The three-window means recomputed here must match the ones 02_decay_panel.py wrote.</span></span>

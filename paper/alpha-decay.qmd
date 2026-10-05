@@ -109,10 +109,11 @@ dataset everything else rests on.
 ::: {.content-visible unless-profile="course"}
 Finally we ask whether a forecaster standing in real time, knowing only the signals that
 had been published by then, could have picked the ones that would keep paying. The answer
-is modest. A linear regression earns an out-of-sample R² below one percent, gradient
-boosted trees and a small neural network do no better, and almost all of the predictive
-content sits in the signal's own return history. Holding every published signal with
-equal weight earns a higher Sharpe ratio than any model-based selection.
+is modest. A linear regression and gradient boosted trees each earn an out-of-sample R²
+below one percent, no model beats another by a margin a test can distinguish, and almost
+all of the predictive content sits in the signal's own return history. Holding every
+published signal with equal weight earns a higher Sharpe ratio than any model-based
+selection.
 :::
 
 @sec-data describes the data, @sec-design the design and the estimator, @sec-result1
@@ -922,15 +923,27 @@ benchmark alone `{python} f"{100*r2.loc['own_mean','r2_vs_zero']:.2f}"` percent.
 the order of magnitude @gu2020 report for individual stocks at the monthly horizon;
 monthly long-short returns are mostly noise.
 
-The flexible models do not beat the linear one. Against the own-mean benchmark OLS adds
-`{python} f"{100*r2.loc['ols','r2_vs_own_mean']:.2f}"` percent, the trees
-`{python} f"{100*r2.loc['gbrt','r2_vs_own_mean']:.2f}"` percent and the network
-`{python} f"{100*r2.loc['mlp','r2_vs_own_mean']:.2f}"` percent. None of the differences
-is distinguishable from zero: the Diebold-Mariano statistic for OLS against the own
-mean is `{python} f"{dm_t('own_mean','ols'):+.2f}"`, for the trees against OLS
-`{python} f"{dm_t('ols','gbrt'):+.2f}"`, and for the network against OLS
-`{python} f"{dm_t('ols','mlp'):+.2f}"`. On this panel a model that can represent
-interactions and nonlinearities finds none worth having.
+```{python}
+#| label: ml-sens-numbers
+#| echo: false
+
+sens = pd.read_csv(OUT / "ml_r2_sensitivity.csv")
+grid = sens[sens["path"].str.startswith("d")]
+```
+
+No model beats another by a margin a test can distinguish. Against the own-mean
+benchmark OLS adds `{python} f"{100*r2.loc['ols','r2_vs_own_mean']:.2f}"` percent, the
+trees `{python} f"{100*r2.loc['gbrt','r2_vs_own_mean']:.2f}"` percent and the network
+`{python} f"{100*r2.loc['mlp','r2_vs_own_mean']:.2f}"` percent. The Diebold-Mariano
+statistic for OLS against the own mean is `{python} f"{dm_t('own_mean','ols'):+.2f}"`,
+for the trees against OLS `{python} f"{dm_t('ols','gbrt'):+.2f}"`, and for the network
+against OLS `{python} f"{dm_t('ols','mlp'):+.2f}"`. The tree number also depends on the
+tuning path: holding any one of the four grid settings fixed through all thirty refits
+gives an $R^2$ between `{python} f"{100*grid['r2_vs_zero'].min():.2f}"` and
+`{python} f"{100*grid['r2_vs_zero'].max():.2f}"` percent, so the gap between the trees
+and the linear model is inside the range the trees cover on their own. (The fit uses no
+subsampling, so a setting fixes the result; seeds play no role.) On this panel a
+model that can represent interactions and nonlinearities finds none that a test can see.
 
 Predictability does not fall with age. The $R^2$ is as high for signals more than ten
 years past publication as for signals in their first three years. Whatever is
@@ -1084,11 +1097,17 @@ models earn their higher mean by selecting volatile signals, and a mean-squared-
 forecast of return has no reason to care about volatility. The long-short versions of
 these portfolios, which also short the bottom fifth, have the same character.
 
-Two cautions. These are portfolios of long-short portfolios and carry no trading costs;
-@chen2023 show how much of a published anomaly's gross return the costs take. And the
+Three cautions. These are portfolios of long-short portfolios and carry no trading
+costs; @chen2023 show how much of a published anomaly's gross return the costs take. The
 return to "the top fifth by own mean" is the return to persistence in the cross-section
 of published anomalies, which is a statement about the data, not a strategy we would
-expect to survive its own publication.
+expect to survive its own publication. And the own-mean Sharpe ratio is sensitive to one
+detail of the universe rule: a signal published in year $y-1$ first enters in the
+December feature month of that year, which forecasts January $y$. Those first-month rows,
+189 in all, carry high historical means, are often selected into the top fifth, and earn
+little; with them the top-fifth Sharpe ratio is `{python} f"{p_own[2]:.2f}"`, and under a
+rule that admits a signal only from the following February it is
+`{python} f"{perf(port['own_mean_x1_top'])[2]:.2f}"`.
 
 ## What this section does and does not show
 

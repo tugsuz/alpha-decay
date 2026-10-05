@@ -18,10 +18,10 @@ abstract: |
   not statistically significant, so the design does not separate arbitrage from
   selection in this universe. We rebuild two of the input series from security-level
   CRSP data to check the dataset. A real-time forecasting exercise over 1995 to 2024
-  finds that next month's return on a published signal is weakly predictable, that
-  gradient boosted trees and a small neural network do no better than a linear
-  regression, and that the predictive content sits in the signal's own return history:
-  the publication clock adds nothing once that history is known.
+  finds that next month's return on a published signal is weakly predictable, that no
+  model beats another by a margin a test can distinguish, and that the predictive
+  content sits in the signal's own return history: the publication clock adds nothing
+  once that history is known.
 
 format:
   html:
