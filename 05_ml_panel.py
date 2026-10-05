@@ -18,6 +18,7 @@ Writes to output/:
     ml_decay_curve.csv    return against months since publication: raw bins and the
                           partial dependence of the fitted models
     ml_tuning.csv         every hyperparameter setting that was tried, by test year
+    ml_r2_sensitivity.csv the tree result under each fixed grid setting
     fig05_r2.png, fig05_decay.png, fig05_portfolio.png
 
 --------------------------------------------------------------------------------------
@@ -247,28 +248,31 @@ def fit_enet(Xtr, ytr, Xva, yva, log):
 
 
 def fit_gbrt(Xtr, ytr, Xva, yva, log):
-    best = None
+    """Gradient boosted trees. Returns the validation-chosen model and, for the
+    sensitivity table, one model per fixed grid setting, each refit on train plus
+    validation."""
+    def make(depth, lr, n, seed):
+        return HistGradientBoostingRegressor(
+            max_depth=depth, learning_rate=lr, max_iter=n, l2_regularization=1.0,
+            min_samples_leaf=200, early_stopping=False, random_state=seed)
+
+    X = np.vstack([Xtr, Xva]); y = np.concatenate([ytr, yva])
+    best, variants = None, {}
     for depth in [2, 3]:
         for lr in [0.05, 0.1]:
-            m = HistGradientBoostingRegressor(
-                max_depth=depth, learning_rate=lr, max_iter=400, l2_regularization=1.0,
-                min_samples_leaf=200, early_stopping=False, random_state=SEED,
-            )
+            m = make(depth, lr, 400, SEED).fit(Xtr, ytr)
             # pick the number of trees on the validation sample by staged prediction
-            m.fit(Xtr, ytr)
             curve = [np.mean((yva - p) ** 2) for p in m.staged_predict(Xva)]
             n_best = int(np.argmin(curve)) + 1
             mse = curve[n_best - 1]
             log.append(("gbrt", f"depth={depth},lr={lr},trees={n_best}", mse))
+            variants[f"gbrt_d{depth}_lr{lr}"] = make(depth, lr, n_best, SEED).fit(X, y).predict
             if best is None or mse < best[0]:
                 best = (mse, depth, lr, n_best)
     _, depth, lr, n_best = best
-    X = np.vstack([Xtr, Xva]); y = np.concatenate([ytr, yva])
-    m = HistGradientBoostingRegressor(
-        max_depth=depth, learning_rate=lr, max_iter=n_best, l2_regularization=1.0,
-        min_samples_leaf=200, early_stopping=False, random_state=SEED,
-    ).fit(X, y)
-    return m.predict, {"depth": depth, "lr": lr, "trees": n_best}
+    m = make(depth, lr, n_best, SEED).fit(X, y)
+    # no subsampling, so the fit is deterministic given the setting; seeds add nothing
+    return m.predict, {"depth": depth, "lr": lr, "trees": n_best}, variants
 
 
 def fit_mlp(Xtr, ytr, Xva, yva, log):
@@ -329,7 +333,7 @@ def run(panel):
         log = []
         f_ols, _ = fit_linear(Xall, yall)
         f_enet, h_enet = fit_enet(Xtr, ytr, Xva, yva, log)
-        f_gbrt, h_gbrt = fit_gbrt(Xtr, ytr, Xva, yva, log)
+        f_gbrt, h_gbrt, gbrt_variants = fit_gbrt(Xtr, ytr, Xva, yva, log)
         f_mlp, h_mlp = fit_mlp(Xtr, ytr, Xva, yva, log)
         fitted[y] = {"ols": f_ols, "enet": f_enet, "gbrt": f_gbrt, "mlp": f_mlp}
         for name, setting, mse in log:
@@ -342,6 +346,8 @@ def run(panel):
         out["enet"] = f_enet(Xte)
         out["gbrt"] = f_gbrt(Xte)
         out["mlp"] = f_mlp(Xte)
+        for name, f in gbrt_variants.items():
+            out[name] = f(Xte)
         preds.append(out)
         print(f"  {y}: train {len(train):>7,} rows, test {len(test):>5,} rows, "
               f"{test['signal'].nunique():>3} signals, gbrt {h_gbrt}, enet {h_enet}, "
@@ -557,6 +563,14 @@ def main():
         r2[f"r2_vs_zero: {name}"] = [r2_oos(sub["target"].to_numpy(), sub[m].to_numpy()) for m in MODELS]
     r2["n_test_rows"] = len(P)
 
+    # how much the tree result depends on the tuning path: every fixed grid setting
+    # held through all years against the validation-chosen path
+    sens = [{"path": "validation-chosen", "r2_vs_zero": r2_oos(y, P["gbrt"].to_numpy())}]
+    for c in [c for c in P.columns if c.startswith("gbrt_")]:
+        sens.append({"path": c.replace("gbrt_", "").replace("_", ", "),
+                     "r2_vs_zero": r2_oos(y, P[c].to_numpy())})
+    sens = pd.DataFrame(sens)
+
     # Diebold-Mariano
     pairs = [("zero", "ols"), ("own_mean", "ols"), ("ols", "enet"), ("ols", "gbrt"),
              ("ols", "mlp"), ("gbrt", "mlp"), ("zero", "gbrt"), ("own_mean", "gbrt")]
@@ -565,10 +579,15 @@ def main():
 
     # portfolios
     port = {m: portfolios(P, m) for m in ["own_mean", "ols", "enet", "gbrt", "mlp"]}
+    # the same sort without each signal's first month in the universe (the December
+    # feature month of its publication year, months_since_pub == 11), to show how much
+    # the own-mean portfolio depends on that one rule
+    port["own_mean_x1"] = portfolios(P[P["months_since_pub"] != 11], "own_mean")
     prow = []
     for m, df in port.items():
-        prow.append({"portfolio": f"{LABELS[m]}: top fifth minus bottom fifth", **perf(df["spread"])})
-        prow.append({"portfolio": f"{LABELS[m]}: top fifth", **perf(df["top"])})
+        lab = LABELS.get(m, "own historical mean, first month in universe excluded")
+        prow.append({"portfolio": f"{lab}: top fifth minus bottom fifth", **perf(df["spread"])})
+        prow.append({"portfolio": f"{lab}: top fifth", **perf(df["top"])})
     prow.append({"portfolio": "all published signals, equal-weighted", **perf(port["ols"]["all"])})
     ptable = pd.DataFrame(prow).set_index("portfolio")
     monthly = pd.concat({m: df[["top", "bottom", "spread"]] for m, df in port.items()}, axis=1)
@@ -582,6 +601,7 @@ def main():
 
     OUT.mkdir(exist_ok=True)
     r2.to_csv(OUT / "ml_r2.csv")
+    sens.to_csv(OUT / "ml_r2_sensitivity.csv", index=False)
     dm.to_csv(OUT / "ml_dm.csv", index=False)
     monthly.to_csv(OUT / "ml_portfolio.csv")
     imp.to_csv(OUT / "ml_importance.csv")
@@ -606,6 +626,10 @@ def main():
         add(f"  {LABELS[m]:<26}{100*r['r2_vs_zero']:>+10.2f}{100*r['r2_vs_own_mean']:>+14.2f}"
             f"{100*r['r2_vs_zero: 0 to 3 years']:>+9.2f}{100*r['r2_vs_zero: 3 to 10 years']:>+9.2f}"
             f"{100*r['r2_vs_zero: over 10 years']:>+9.2f}")
+    add("")
+    add("Gradient boosted trees, out-of-sample R2 (%) vs zero by tuning path:")
+    for _, r in sens.iterrows():
+        add(f"  {r['path']:<30} {100*r['r2_vs_zero']:+.2f}")
     add("")
     add("Diebold-Mariano t-statistics (positive: the model beats the benchmark):")
     for _, r in dm.iterrows():

@@ -12,6 +12,13 @@ Out-of-sample R2 (%), pooled over all test rows:
   gradient boosted trees         +0.88         +0.26    +0.41    +0.53    +1.10
   neural net (16 units)          -0.22         -0.84    -2.20    -1.96    +0.84
 
+Gradient boosted trees, out-of-sample R2 (%) vs zero by tuning path:
+  validation-chosen     +0.88
+  d2, lr0.05                     +0.84
+  d2, lr0.1                      +0.93
+  d3, lr0.05                     +0.80
+  d3, lr0.1                      +0.70
+
 Diebold-Mariano t-statistics (positive: the model beats the benchmark):
   OLS                        vs zero forecast          t = +0.24
   OLS                        vs own historical mean    t = -0.29
@@ -34,6 +41,8 @@ Portfolios of signals, monthly, %:
   gradient boosted trees: top fifth                           1.004  3.889    0.89   4.90
   neural net (16 units): top fifth minus bottom fifth         1.163  6.061    0.66   3.64
   neural net (16 units): top fifth                            0.993  3.506    0.98   5.37
+  own historical mean, first month in universe excluded: top fifth minus bottom fifth  0.644  2.100    1.06   5.82
+  own historical mean, first month in universe excluded: top fifth  0.751  1.712    1.52   8.32
   all published signals, equal-weighted                       0.381  1.003    1.31   7.20
 
 Permutation importance, rise in pooled test MSE when a group is shuffled:
