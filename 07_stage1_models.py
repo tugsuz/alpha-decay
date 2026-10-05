@@ -65,12 +65,14 @@ rows whose realised return is beyond +-100%, and rows with a CRSP return.
 Runs. Every run gets an id (start time and commit) that goes into each forecast file and
 each row of the per-year csvs, with a manifest in output/stage1_run.json (flags, test years,
 panel, versions). The tables are built only from rows carrying the current id. --skip-done
-continues the run in the manifest; without it a new run starts, the previous run's tables
-are copied to output/runs/<id>/, and its rows are dropped from the live tables.
+continues the run in the manifest, --refit gbrt refits the named models inside it and
+replaces their forecasts; without either a new run starts, the previous run's tables are
+copied to output/runs/<id>/, and its rows are dropped from the live tables.
 
 Costs. Each traded dollar is charged half a spread. The spread is the month's mean CRSP
 closing quoted spread (09_spreads.py) where a stock-month has one, and JKP's Corwin-Schultz
-estimate where it does not; the tables report both the cost on that series and the cost on
+estimate where it does not; the join happens at evaluation time, so new spread files need
+only --eval-only. The tables report both the cost on that series and the cost on
 Corwin-Schultz alone, the share of traded weight priced from quotes, and the two spreads by
 size group, with Abdi-Ranaldo as a third reading.
 
@@ -117,7 +119,7 @@ PATIENCE = 5
 MODELS = ["huber", "enet", "pcr", "pls", "gbrt", "nn1", "nn2", "nn3"]
 IMPORTANCE_MODELS = ["huber", "gbrt", "nn3"]
 ID_COLS = ["id", "eom", "permno", "prc", "size_grp", "me", "ret_exc_lead1m", "bidaskhl_21d", "source_crsp"]
-PANEL_VERSION = 4          # bump when the cached panel's columns change
+PANEL_VERSION = 3          # bump when the cached panel's columns change
 SPREADS = DATA / "spreads"  # 09_spreads.py: monthly quoted and Abdi-Ranaldo spreads by permno
 
 import importlib.util
@@ -146,8 +148,8 @@ def start_run(args, tag):
     manifest = OUT / MANIFEST_NAME
     prev = json.loads(manifest.read_text()) if manifest.exists() else None
     now = time.strftime("%Y-%m-%d %H:%M:%S")
-    if args.skip_done and prev and prev.get("panel") == tag:
-        prev.setdefault("continued", []).append(now)
+    if (args.skip_done or args.refit) and prev and prev.get("panel") == tag:
+        prev.setdefault("continued", []).append(now + (f" refit {args.refit}" if args.refit else ""))
         manifest.write_text(json.dumps(prev, indent=1))
         return prev["run_id"]
     run_id = time.strftime("%Y%m%d-%H%M%S") + "-" + git_commit()
@@ -270,9 +272,7 @@ def load_panel(chars: List[str], first: int, last: int,
             blocks.append(rank_transform_panel(df, avail).to_numpy())
             metas.append(df[ID_COLS])
             print(f"  ranked {f.stem}: {len(df):,} rows", flush=True)
-        meta = pd.concat(metas, ignore_index=True)
-        meta = add_spreads(meta)
-        meta, X, cols = prepare_meta(meta), np.vstack(blocks), avail
+        meta, X, cols = prepare_meta(pd.concat(metas, ignore_index=True)), np.vstack(blocks), avail
     np.save(xfile, X)
     save_private(meta.assign(target_month=meta["target_month"].astype(str)), mfile)
     manifest.write_text(json.dumps({**want, "cols": cols}))
@@ -283,25 +283,32 @@ def pred_path_like(p: Path) -> Path:
     return p if p.exists() or not p.with_suffix(".csv").exists() else p.with_suffix(".csv")
 
 
-def add_spreads(meta: pd.DataFrame) -> pd.DataFrame:
-    """Join the monthly quoted and Abdi-Ranaldo spreads from 09_spreads.py on permno and
-    the month of eom. Without the files the columns are missing and the costs fall back to
-    Corwin-Schultz throughout."""
+def add_spreads(P: pd.DataFrame) -> pd.DataFrame:
+    """Join the monthly quoted and Abdi-Ranaldo spreads from 09_spreads.py onto the test
+    rows, on permno and the month of eom, at evaluation time, so a new spread file needs
+    --eval-only and no refit. Forecast files written before permno was carried are joined
+    on id, which equals permno for CRSP securities in JKP; the match rate is printed either
+    way. Without spread files the costs fall back to Corwin-Schultz throughout."""
+    P = P.copy()
+    if "quoted" in P and P["quoted"].notna().any():          # the synthetic panel carries its own
+        return P
     files = sorted(SPREADS.glob("spreads_*.parquet"))
     if not files:
-        print("  no spread files in data/spreads; costs use Corwin-Schultz only", flush=True)
-        return meta
+        print("no spread files in data/spreads; costs use Corwin-Schultz only")
+        P["quoted"], P["ar"] = np.nan, np.nan
+        return P
     sp = pd.concat((pd.read_parquet(f, columns=["permno", "month", "quoted", "ar", "n_quoted"]) for f in files),
                    ignore_index=True)
     sp = sp[sp["n_quoted"] >= 5]              # a month needs five quoted days to count
     sp["month"] = pd.to_datetime(sp["month"]).dt.to_period("M")
     sp["permno"] = sp["permno"].astype("float64")
-    m = meta.copy()
-    m["month"] = pd.to_datetime(m["eom"]).dt.to_period("M")
-    m["permno"] = m["permno"].astype("float64")
-    m = m.merge(sp.drop(columns="n_quoted"), on=["permno", "month"], how="left").drop(columns="month")
-    print(f"  quoted spread found for {m['quoted'].notna().mean():.3f} of rows", flush=True)
-    return m
+    key = "permno" if "permno" in P else "id"
+    P["month"] = pd.to_datetime(P["eom"]).dt.to_period("M")
+    P["_key"] = P[key].astype("float64")
+    P = P.merge(sp.drop(columns="n_quoted").rename(columns={"permno": "_key"}), on=["_key", "month"], how="left")
+    P = P.drop(columns=["month", "_key"])
+    print(f"quoted spread joined on {key}: found for {P['quoted'].notna().mean():.3f} of test rows")
+    return P
 
 
 def prepare_meta(meta: pd.DataFrame) -> pd.DataFrame:
@@ -315,12 +322,6 @@ def prepare_meta(meta: pd.DataFrame) -> pd.DataFrame:
     # closing bid and ask (09_spreads.py) is the one the costs use where it exists; the
     # Corwin-Schultz figure fills the stock-months without a quote.
     m["half_spread_cs"] = (m["bidaskhl_21d"].clip(lower=0) / 2).astype(np.float32)
-    if "quoted" not in m:
-        m["quoted"] = np.nan
-    if "ar" not in m:
-        m["ar"] = np.nan
-    m["half_spread"] = np.where(m["quoted"].notna(), m["quoted"] / 2, m["half_spread_cs"]).astype(np.float32)
-    m["spread_source"] = np.where(m["quoted"].notna(), "quoted", "cs")
     m["small"] = m["size_grp"].astype(str).str.lower().isin(["micro", "nano"])
     # a CRSP return: JKP's source flag when the column is there, else a permno
     if "source_crsp" in m and m["source_crsp"].notna().any():
@@ -475,22 +476,22 @@ def fit_pls(Xtr, ytr, Xva, yva, smoke=False, max_rows=1_500_000):
 
 
 def fit_gbrt(Xtr, ytr, Xva, yva, smoke=False, robust=False):
-    """With robust=True LightGBM minimises a Huber loss whose threshold is 1.345 robust
-    standard deviations of the training target (Gu, Kelly and Xiu's GBRT+H)."""
+    """Squared loss on the (clipped, under --robust) training target, like every model but
+    the Huber regression. The first robust pass gave the trees a Huber objective with a
+    threshold of 1.345 robust standard deviations; on a right-skewed return it fits a level
+    between the median and the mean, and the forecasts came out about 0.6% a month too low
+    (rank IC the highest of all models, R2 against zero -0.8%). The clipping is the
+    protection against the tails; the loss is squared error."""
     best = None
     grid = [(2, 0.1)] if smoke else [(d, lr) for d in (2, 3) for lr in (0.05, 0.1)]
     for depth, lr in grid:
         if HAVE_LGB:
             import lightgbm as lgb
-            loss = {}
-            if robust:
-                mad = float(np.median(np.abs(ytr - np.median(ytr)))) * 1.4826
-                loss = {"objective": "huber", "alpha": 1.345 * (mad or float(np.std(ytr)))}
             m = lgb.LGBMRegressor(max_depth=depth, num_leaves=2 ** depth, learning_rate=lr,
                                   n_estimators=50 if smoke else 1000, subsample=0.5,
                                   subsample_freq=1, colsample_bytree=0.5,
                                   min_child_samples=500, reg_lambda=1.0, verbose=-1,
-                                  random_state=0, **loss)
+                                  random_state=0)
             m.fit(Xtr, ytr, eval_set=[(Xva, yva)],
                   callbacks=[lgb.early_stopping(50, verbose=False)])
             n_best = int(m.best_iteration_ or m.n_estimators)
@@ -706,8 +707,9 @@ def run(meta, X, cols, chars, args):
         if te.sum() == 0:
             continue
         sets = {"public": [c for c in cols if pub[c] < y], "full": list(cols)}
-        out = meta.loc[te, ["id", "eom", "target_month", "size_grp", "me", "half_spread", "half_spread_cs",
-                            "spread_source", "spread_raw", "quoted", "ar", "y", "crsp"]].copy()
+        keep_cols = ["id", "eom", "permno", "target_month", "size_grp", "me", "half_spread_cs", "spread_raw",
+                     "y", "crsp"] + [c for c in ("quoted", "ar") if c in meta]
+        out = meta.loc[te, keep_cols].copy()
         out["panel"] = tag
         out["run_id"] = args.run_id
         ytr, yva = meta.loc[tr, "y"].to_numpy(), meta.loc[va, "y"].to_numpy()
@@ -963,6 +965,11 @@ def evaluate(args):
     print(f"tables from {len(frames)} forecast files, test years {args.first_test} to {args.last_test}, "
           f"run {args.run_id}")
     P = pd.concat(frames, ignore_index=True)
+    if "half_spread_cs" not in P:                 # forecast files from before the quoted spread
+        P["half_spread_cs"] = P["half_spread"]
+    P = add_spreads(P)
+    P["half_spread"] = np.where(P["quoted"].notna(), P["quoted"] / 2, P["half_spread_cs"]).astype(np.float32)
+    P["spread_source"] = np.where(P["quoted"].notna(), "quoted", "cs")
     P["small"] = P["size_grp"].astype(str).str.lower().isin(["micro", "nano"])
     P["target_month"] = pd.PeriodIndex(P["target_month"], freq="M")
     P["year"] = P["target_month"].dt.year
@@ -1120,11 +1127,16 @@ def main():
     ap.add_argument("--robust", action="store_true",
                     help="clip the fitting and selection targets at the training 0.1/99.9 percentiles; "
                          "Huber loss for the trees; forecasts still scored on raw returns")
-    ap.add_argument("--crsp-only", action="store_true", help="keep only rows with a CRSP permno")
+    ap.add_argument("--crsp-only", action="store_true", help="keep only rows whose return comes from CRSP")
+    ap.add_argument("--refit", default=None,
+                    help="comma-separated models to refit inside the current run, replacing their forecasts")
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--run-id", default=None, help=argparse.SUPPRESS)
     args = ap.parse_args()
     args.models = [m for m in args.models.split(",") if m]
+    if args.refit:
+        args.models = [m for m in args.refit.split(",") if m]
+        args.skip_done = False
     args.importance_models = args.importance_models.split(",")
     if args.first_test is None:
         args.first_test = 2005 if args.smoke else FIRST_TEST
@@ -1155,6 +1167,8 @@ def main():
             for flag in ("synthetic", "smoke", "skip_done", "rebuild_panel", "robust", "crsp_only"):
                 if getattr(args, flag):
                     cmd.append("--" + flag.replace("_", "-"))
+            if args.refit:
+                cmd += ["--refit", ",".join(g)]
             cmd += ["--every", str(args.every), "--first-test", str(args.first_test),
                     "--last-test", str(args.last_test), "--device", args.device,
                     "--importance-models", ",".join(args.importance_models), "--run-id", args.run_id]
