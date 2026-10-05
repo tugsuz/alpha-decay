@@ -176,7 +176,7 @@ def main() -> None:
     ap.add_argument("--lib", default=None, help="CRSP library to pull from (default: pick the freshest)")
     args = ap.parse_args()
 
-    # Avoid re-typing the username every run: export WRDS_USERNAME=mtugsuz
+    # Avoid re-typing the username every run: export WRDS_USERNAME=<your WRDS login>
     user = os.environ.get("WRDS_USERNAME")
     db = wrds.Connection(wrds_username=user) if user else wrds.Connection()
     try:

@@ -91,8 +91,9 @@ first thing to run after a new data release; `01_first_figure.py figure` plots o
 anomaly with its publication date marked.
 
 Needs Python 3 with pandas, numpy, matplotlib and scikit-learn. The CRSP scripts also
-need the `wrds` package and a WRDS account; the username is read from `WRDS_USERNAME` or
-prompted for, and no credential is written to any file here. The paper needs Quarto with
+need the `wrds` package and a WRDS account; the username is read from the `WRDS_USERNAME`
+environment variable (`06_jkp_pull.py` stops with a message if it is unset, `03_crsp_pull.py`
+prompts), the password from `~/.pgpass`, and no credential is written to any file here. The paper needs Quarto with
 Jupyter, and a TeX installation for the PDF. `quarto render paper/alpha-decay.qmd
 --profile course` renders the paper without the forecasting section.
 

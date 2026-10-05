@@ -133,7 +133,7 @@ def check(db) -> None:
                count(DISTINCT id) AS stocks
         FROM {TABLE}
         WHERE {SCREEN}
-          AND EXTRACT(year FROM eom)::int % 5 = 0
+          AND mod(EXTRACT(year FROM eom)::int, 5) = 0
         GROUP BY 1 ORDER BY 1
     """)
     for r in counts.itertuples():
@@ -209,8 +209,13 @@ def main() -> None:
     ap.add_argument("--last", type=int, default=LAST_YEAR)
     args = ap.parse_args()
 
+    # The username comes from the WRDS_USERNAME environment variable and the password
+    # from ~/.pgpass, which the wrds package offers to write on first use. Neither is
+    # stored by this script.
     user = os.environ.get("WRDS_USERNAME")
-    db = wrds.Connection(wrds_username=user) if user else wrds.Connection()
+    if not user:
+        sys.exit("set WRDS_USERNAME to your WRDS login before running this script")
+    db = wrds.Connection(wrds_username=user)
     try:
         if args.check:
             check(db)
