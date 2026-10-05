@@ -504,7 +504,7 @@ def run(meta, X, cols, chars, args):
 
     for y in years:
         pred_file = PRIVATE / f"preds_{y}.parquet"
-        if args.resume and (pred_file.exists() or pred_file.with_suffix(".csv").exists()):
+        if args.skip_done and (pred_file.exists() or pred_file.with_suffix(".csv").exists()):
             print(f"{y}: forecasts on disk, skipping")
             continue
         tr, va, te = splits(meta, y)
@@ -543,7 +543,7 @@ def run(meta, X, cols, chars, args):
         if imp_rows:
             imp = pd.DataFrame(imp_rows)
             old = OUT / "stage1_importance.csv"
-            if old.exists() and args.resume:
+            if old.exists() and args.skip_done:
                 prev = pd.read_csv(old)
                 imp = pd.concat([prev[~prev["year"].isin(imp["year"])], imp], ignore_index=True)
             imp.to_csv(old, index=False)
@@ -697,7 +697,7 @@ def main():
     ap.add_argument("--smoke", action="store_true", help="tiny grids, few epochs, three test years")
     ap.add_argument("--timing", action="store_true", help="time nn3 on cpu and mps for one year")
     ap.add_argument("--eval-only", action="store_true", help="tables from saved forecasts only")
-    ap.add_argument("--resume", action="store_true", help="skip test years with forecasts on disk")
+    ap.add_argument("--skip-done", action="store_true", help="skip test years whose forecasts are already on disk")
     ap.add_argument("--every", type=int, default=1, help="refit every N test years")
     ap.add_argument("--first-test", type=int, default=FIRST_TEST)
     ap.add_argument("--last-test", type=int, default=LAST_TEST)
