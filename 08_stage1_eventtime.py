@@ -40,6 +40,7 @@ once the first results are in.
 --------------------------------------------------------------------------------------
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -103,6 +104,16 @@ def main():
     if not imp_file.exists():
         sys.exit("output/stage1_importance.csv is missing; run 07_stage1_models.py first")
     imp = pd.read_csv(imp_file)
+    manifest = OUT / "stage1_run.json"
+    if not manifest.exists():
+        sys.exit(f"{manifest} is missing; run 07_stage1_models.py first")
+    run_id = json.loads(manifest.read_text())["run_id"]
+    keep = (imp["run_id"] == run_id) if "run_id" in imp else pd.Series(False, index=imp.index)
+    if (~keep).any():
+        print(f"dropping {(~keep).sum():,} importance rows from other runs; keeping run {run_id}")
+        imp = imp[keep]
+    if imp.empty:
+        sys.exit("no importance rows from the current run")
     r2_file = OUT / "stage1_r2.csv"
     if r2_file.exists():                    # the forecast years of the run that built the tables
         yrs = pd.read_csv(r2_file)["year"]

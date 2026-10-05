@@ -62,7 +62,14 @@ loss is the protection. Forecasts are always scored against the raw realised ret
 the R2 tables are reported on four row sets: all rows, without nano and micro caps, without
 rows whose realised return is beyond +-100%, and rows with a CRSP return.
 
-Outputs: out-of-sample R2 against a zero forecast, pooled and by year; Diebold-Mariano
+Runs. Every run gets an id (start time and commit) that goes into each forecast file and
+each row of the per-year csvs, with a manifest in output/stage1_run.json (flags, test years,
+panel, versions). The tables are built only from rows carrying the current id. --skip-done
+continues the run in the manifest; without it a new run starts, the previous run's tables
+are copied to output/runs/<id>/, and its rows are dropped from the live tables.
+
+Outputs: out-of-sample R2 against a zero forecast, pooled and by year; rank IC (monthly
+Spearman between forecast and realised return, all rows and ex nano/micro); Diebold-Mariano
 statistics on monthly cross-sectional loss differences with a Newey-West variance; decile
 long-short portfolios, equal- and value-weighted, with and without micro and nano caps;
 turnover; a cost charge of turnover times each stock's half spread (Corwin-Schultz,
@@ -103,15 +110,61 @@ PATIENCE = 5
 
 MODELS = ["huber", "enet", "pcr", "pls", "gbrt", "nn1", "nn2", "nn3"]
 IMPORTANCE_MODELS = ["huber", "gbrt", "nn3"]
-ID_COLS = ["id", "eom", "permno", "prc", "size_grp", "me", "ret_exc_lead1m", "bidaskhl_21d"]
-PANEL_VERSION = 2          # bump when the cached panel's columns change
+ID_COLS = ["id", "eom", "permno", "prc", "size_grp", "me", "ret_exc_lead1m", "bidaskhl_21d", "source_crsp"]
+PANEL_VERSION = 3          # bump when the cached panel's columns change
 
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 
 HAVE_LGB = importlib.util.find_spec("lightgbm") is not None
+MANIFEST_NAME = "stage1_run.json"
+
+
+def git_commit() -> str:
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=HERE, capture_output=True,
+                             text=True, timeout=10)
+        return out.stdout.strip() or "nogit"
+    except Exception:
+        return "nogit"
+
+
+def start_run(args, tag):
+    """Every run gets an id that is written into each output row and file, and a manifest
+    in output/. The tables are built only from rows carrying the current id, so nothing
+    from an earlier run can leak into them. --skip-done continues the run in the manifest."""
+    manifest = OUT / MANIFEST_NAME
+    prev = json.loads(manifest.read_text()) if manifest.exists() else None
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    if args.skip_done and prev and prev.get("panel") == tag:
+        prev.setdefault("continued", []).append(now)
+        manifest.write_text(json.dumps(prev, indent=1))
+        return prev["run_id"]
+    run_id = time.strftime("%Y%m%d-%H%M%S") + "-" + git_commit()
+    if prev and prev.get("run_id"):
+        # the earlier run's tables move to output/runs/<its id>/ before this run's rows replace them
+        archive = OUT / "runs" / prev["run_id"]
+        archive.mkdir(parents=True, exist_ok=True)
+        for f in list(OUT.glob("stage1_*.csv")) + [manifest]:
+            shutil.copy2(f, archive / f.name)
+        print(f"tables of run {prev['run_id']} archived in {archive}")
+    flags = {k: v for k, v in vars(args).items() if k not in ("worker", "run_id")}
+    manifest.write_text(json.dumps({"run_id": run_id, "commit": git_commit(), "started": now,
+                                    "panel": tag, "flags": flags,
+                                    "test_years": list(range(args.first_test, args.last_test + 1, args.every)),
+                                    "python": sys.version.split()[0], "numpy": np.__version__,
+                                    "pandas": pd.__version__}, indent=1))
+    return run_id
+
+
+def current_run_id():
+    manifest = OUT / MANIFEST_NAME
+    if not manifest.exists():
+        sys.exit(f"no {MANIFEST_NAME} in {OUT}; run the fits first")
+    return json.loads(manifest.read_text())["run_id"]
 HAVE_TORCH = importlib.util.find_spec("torch") is not None
 NN_MODELS = ["nn1", "nn2", "nn3"]
 
@@ -198,10 +251,15 @@ def load_panel(chars: List[str], first: int, last: int,
         files = [f for f in files if first <= int(f.stem.split("_")[-1]) <= last]
         if not files:
             sys.exit(f"no year files in {CHUNKS}; run 06_jkp_pull.py first")
-        avail = [c for c in chars if c in pd.read_parquet(files[0]).columns]
+        first_cols = set(pd.read_parquet(files[0]).columns)
+        avail = [c for c in chars if c in first_cols]
+        id_have = [c for c in ID_COLS if c in first_cols]
         metas, blocks = [], []
         for f in files:
-            df = pd.read_parquet(f, columns=list(dict.fromkeys(ID_COLS + avail)))
+            df = pd.read_parquet(f, columns=list(dict.fromkeys(id_have + avail)))
+            for c in ID_COLS:
+                if c not in df:
+                    df[c] = np.nan
             blocks.append(rank_transform_panel(df, avail).to_numpy())
             metas.append(df[ID_COLS])
             print(f"  ranked {f.stem}: {len(df):,} rows", flush=True)
@@ -226,7 +284,12 @@ def prepare_meta(meta: pd.DataFrame) -> pd.DataFrame:
     # rebate, so the charge is floored at zero
     m["half_spread"] = (m["bidaskhl_21d"].clip(lower=0) / 2).astype(np.float32)
     m["small"] = m["size_grp"].astype(str).str.lower().isin(["micro", "nano"])
-    m["crsp"] = m["permno"].notna() if "permno" in m else True
+    # a CRSP return: JKP's source flag when the column is there, else a permno
+    if "source_crsp" in m and m["source_crsp"].notna().any():
+        m["crsp"] = m["source_crsp"].fillna(0).to_numpy() == 1
+    else:
+        m["crsp"] = m["permno"].notna() if "permno" in m else True
+    m["spread_raw"] = m["bidaskhl_21d"].astype(np.float32)
     return m
 
 
@@ -269,10 +332,12 @@ def synthetic_panel(chars: List[str], first: int, last: int,
         y[wild] = rng.uniform(5, 500, wild.sum()).astype(np.float32)
         me = np.exp(rng.normal(6, 2, n)).astype(np.float32)
         permno = np.where(rng.random(n) < 0.06, np.nan, np.arange(n) + 10000).astype(np.float32)
+        source = np.where(np.isnan(permno), 0.0, np.where(rng.random(n) < 0.02, 0.0, 1.0)).astype(np.float32)
         q = pd.qcut(me, [0, .2, .5, .8, .95, 1], labels=["nano", "micro", "small", "large", "mega"])
         rows.append(pd.DataFrame({
             "id": np.arange(n), "eom": m.to_timestamp(how="end").normalize(),
             "permno": permno, "prc": np.exp(rng.normal(2.5, 1.2, n)).astype(np.float32),
+            "source_crsp": source,
             "size_grp": q.astype(str), "me": me, "ret_exc_lead1m": y,
             "bidaskhl_21d": rng.normal(0.01, 0.01, n).astype(np.float32)}))
         blocks.append(z)
@@ -585,8 +650,9 @@ def run(meta, X, cols, chars, args):
     for y in years:
         pf = pred_path(y)
         existing = load_private(pf) if pf.exists() else None
-        if existing is not None and existing.get("panel", pd.Series([None])).iloc[0] != tag:
-            print(f"{y}: {pf.name} holds forecasts from another panel; it will be replaced", flush=True)
+        if existing is not None and (existing.get("panel", pd.Series([None])).iloc[0] != tag
+                                     or existing.get("run_id", pd.Series([None])).iloc[0] != args.run_id):
+            print(f"{y}: {pf.name} holds forecasts from another run; it will be replaced", flush=True)
             existing = None
         wanted = [f"{m}_{s_}" for m in args.models for s_ in ("public", "full")]
         if args.skip_done and existing is not None and all(c in existing.columns for c in wanted):
@@ -600,8 +666,10 @@ def run(meta, X, cols, chars, args):
         if te.sum() == 0:
             continue
         sets = {"public": [c for c in cols if pub[c] < y], "full": list(cols)}
-        out = meta.loc[te, ["id", "eom", "target_month", "size_grp", "me", "half_spread", "y", "crsp"]].copy()
+        out = meta.loc[te, ["id", "eom", "target_month", "size_grp", "me", "half_spread", "spread_raw",
+                            "y", "crsp"]].copy()
         out["panel"] = tag
+        out["run_id"] = args.run_id
         ytr, yva = meta.loc[tr, "y"].to_numpy(), meta.loc[va, "y"].to_numpy()
         y_te = out["y"].to_numpy()
         # --robust: the fitting and selection targets are clipped at the 0.1 and 99.9
@@ -636,11 +704,12 @@ def run(meta, X, cols, chars, args):
                 y_sd = float(np.std(y_te) or 1.0)
                 ratio = float(np.std(p) / y_sd)
                 offset = float((np.mean(p) - np.mean(y_te)) / y_sd)
-                tuning.append({"year": y, "set": set_name, "model": name, "setting": str(setting),
+                tuning.append({"run_id": args.run_id, "year": y, "set": set_name, "model": name,
+                               "setting": str(setting),
                                "pred_sd_over_y_sd": ratio, "pred_mean_minus_y_mean_over_y_sd": offset,
                                "robust": bool(args.robust), "clip_lo": lo, "clip_hi": hi,
                                "train_rows_clipped": clipped, "crsp_only": bool(args.crsp_only)})
-                timing.append({"year": y, "set": set_name, "model": name, "seconds": dt})
+                timing.append({"run_id": args.run_id, "year": y, "set": set_name, "model": name, "seconds": dt})
                 print(f"   {set_name:<6} {name:<6} {dt:6.0f}s  sd ratio {ratio:.3f}  offset {offset:+.3f}  {setting}",
                       flush=True)
                 if set_name == "full" and name in args.importance_models:
@@ -649,7 +718,7 @@ def run(meta, X, cols, chars, args):
                     for k, c in enumerate(scols):
                         Zp = Xte.copy()
                         Zp[:, k] = rng.permutation(Zp[:, k])
-                        imp_rows.append({"year": y, "model": name, "characteristic": c,
+                        imp_rows.append({"run_id": args.run_id, "year": y, "model": name, "characteristic": c,
                                          "mse_increase": mse(y_te, predict(Zp)) - base})
             del Xtr, Xva, Xte
         if existing is not None:
@@ -680,16 +749,28 @@ def r2_oos(y, p):
     return 1 - np.sum((y - p) ** 2) / np.sum(y ** 2)
 
 
-def drop_stale_years(path, years):
-    """Keep only the rows of a per-year csv that belong to this run's forecast years."""
+def drop_other_runs(path, run_id, years):
+    """Keep only the rows of a per-year csv that carry this run's id and forecast years."""
     if not path.exists():
         return
     d = pd.read_csv(path)
     keep = d["year"].isin(years)
+    keep &= (d["run_id"] == run_id) if "run_id" in d else False
     if (~keep).any():
-        print(f"{path.name}: dropped {(~keep).sum():,} rows from years outside this run "
-              f"({', '.join(str(v) for v in sorted(set(d.loc[~keep, 'year'])))})")
+        print(f"{path.name}: dropped {(~keep).sum():,} rows from other runs or years")
         d[keep].to_csv(path, index=False)
+
+
+def rank_ic(P, col, mask):
+    """Monthly cross-sectional Spearman correlation between the forecast and the realised
+    return; mean, plain and Newey-West t-statistics, share of positive months."""
+    sub = P.loc[mask, ["target_month", col, "y"]]
+    r = sub.groupby("target_month")[[col, "y"]].rank()
+    r["target_month"] = sub["target_month"].to_numpy()
+    ic = r.groupby("target_month").apply(lambda g: g[col].corr(g["y"])).dropna()
+    x = ic.to_numpy()
+    return {"ic_mean": x.mean(), "ic_sd": x.std(ddof=1), "t": x.mean() / (x.std(ddof=1) / np.sqrt(len(x))),
+            "t_nw": x.mean() / np.sqrt(nw_var(x)), "months": len(x), "share_positive": (x > 0).mean()}
 
 
 def target_check(meta, path):
@@ -697,7 +778,7 @@ def target_check(meta, path):
     the tails are and how much of the squared-return total a handful of rows carry.
     Aggregates only."""
     d = meta[~np.isnan(meta["y"].to_numpy())]
-    rows = []
+    rows, top_rows = [], []
     for yr, g in d.groupby("target_year"):
         if yr < FIRST_TEST or yr > LAST_TEST:
             continue
@@ -711,17 +792,34 @@ def target_check(meta, path):
                      "n_abs_gt_10": int((ay > 10).sum()),
                      "share_sq_top1": top[0] / top.sum(), "share_sq_top10": top[:10].sum() / top.sum(),
                      "share_sq_abs_gt_1": (y[ext] ** 2).sum() / top.sum(),
-                     "ext_share_no_permno": float((~g["crsp"].to_numpy()[ext]).mean()) if ext.any() else np.nan,
+                     "ext_share_no_permno": float(g["permno"].isna().to_numpy()[ext].mean()) if ext.any() else np.nan,
+                     "ext_share_not_crsp": float((~g["crsp"].to_numpy()[ext]).mean()) if ext.any() else np.nan,
                      "ext_share_small": float(g["small"].to_numpy()[ext].mean()) if ext.any() else np.nan,
                      "ext_share_prc_lt_1": float((g["prc"].to_numpy()[ext] < 1).mean()) if ext.any() else np.nan,
-                     "share_no_permno": float((~g["crsp"].to_numpy()).mean())})
+                     "share_no_permno": float(g["permno"].isna().mean()),
+                     "share_not_crsp": float((~g["crsp"].to_numpy()).mean())})
+        # the three largest rows of the year, as categories only: where the squared-return
+        # total sits and what kind of row carries it
+        order = np.argsort(ay)[::-1][:3]
+        for r, i in enumerate(order):
+            row = g.iloc[i]
+            prc = row["prc"]
+            top_rows.append({"year": int(yr), "rank": r + 1, "share_sq": float(y[i] ** 2 / top.sum()),
+                             "sign": "+" if y[i] > 0 else "-",
+                             "crsp_return": bool(row["crsp"]), "has_permno": bool(pd.notna(row["permno"])),
+                             "prc_bucket": "missing" if pd.isna(prc) else ("<0.1" if prc < 0.1 else "<1" if prc < 1 else "<5" if prc < 5 else ">=5"),
+                             "size_grp": str(row["size_grp"])})
     t = pd.DataFrame(rows)
     t.to_csv(path, index=False)
+    tt = pd.DataFrame(top_rows)
+    tt.to_csv(path.with_name(path.stem + "_top.csv"), index=False)
     with pd.option_context("display.width", 200):
         print(t[["year", "n", "sd", "max", "q999", "n_abs_gt_1", "n_abs_gt_10", "share_sq_top1",
-                 "share_sq_top10", "share_sq_abs_gt_1", "ext_share_no_permno", "ext_share_small",
-                 "ext_share_prc_lt_1"]].round(3).to_string(index=False))
-    print(f"wrote {path}")
+                 "share_sq_top10", "share_sq_abs_gt_1", "ext_share_not_crsp", "ext_share_small",
+                 "ext_share_prc_lt_1", "share_not_crsp"]].round(3).to_string(index=False))
+        print("\nthe largest row of each year:")
+        print(tt[tt["rank"] == 1].drop(columns="rank").round(3).to_string(index=False))
+    print(f"wrote {path} and {path.stem}_top.csv")
 
 
 def nw_var(d, lags=12):
@@ -747,6 +845,7 @@ def decile_portfolios(P, col, weighting="ew", universe="all"):
     Returns monthly gross return, turnover and cost of the long-short position."""
     rows = []
     prev_w = None
+    by_size = {}
     sub = P if universe == "all" else P[~P["small"]]
     for m, g in sub.groupby("target_month"):
         if len(g) < 100:
@@ -765,14 +864,19 @@ def decile_portfolios(P, col, weighting="ew", universe="all"):
             turn, cost = np.nan, np.nan
         else:
             dw = w.sub(prev_w, fill_value=0.0)
-            hs = g.set_index("id")["half_spread"].reindex(dw.index)
+            gi = g.set_index("id")
+            hs = gi["half_spread"].reindex(dw.index)
             hs = hs.fillna(hs.median() if hs.notna().any() else 0.0)
             turn = float(dw.abs().sum() / 2)
             cost = float((dw.abs() * hs).sum())
+            sg = gi["size_grp"].astype(str).reindex(dw.index).fillna("left_universe")
+            for k, (t_, c_) in pd.DataFrame({"t": dw.abs(), "c": dw.abs() * hs}).groupby(sg).sum().iterrows():
+                acc = by_size.setdefault(k, [0.0, 0.0]); acc[0] += t_; acc[1] += c_
         rows.append({"target_month": m, "gross": ret, "turnover": turn, "cost": cost})
         prev_w = w
     out = pd.DataFrame(rows).set_index("target_month")
     out["net"] = out["gross"] - out["cost"].fillna(0)
+    out.attrs["by_size"] = pd.DataFrame(by_size, index=["traded", "cost"]).T
     return out
 
 
@@ -796,16 +900,18 @@ def evaluate(args):
     frames = []
     for f in files:
         d = load_private(f)
-        if d.get("panel", pd.Series([None])).iloc[0] == tag:
+        if (d.get("panel", pd.Series([None])).iloc[0] == tag
+                and d.get("run_id", pd.Series([None])).iloc[0] == args.run_id):
             frames.append(d)
         else:
             left_out.append(f.name)
     if left_out:
         print(f"left out of the tables ({len(left_out)} files outside {args.first_test} to "
-              f"{args.last_test} or from another panel): {', '.join(sorted(left_out))}")
+              f"{args.last_test} or from another run): {', '.join(sorted(left_out))}")
     if not frames:
-        sys.exit("no forecasts from this panel in the test years; run the fits first")
-    print(f"tables from {len(frames)} forecast files, test years {args.first_test} to {args.last_test}")
+        sys.exit(f"no forecasts from run {args.run_id} in the test years; run the fits first")
+    print(f"tables from {len(frames)} forecast files, test years {args.first_test} to {args.last_test}, "
+          f"run {args.run_id}")
     P = pd.concat(frames, ignore_index=True)
     P["small"] = P["size_grp"].astype(str).str.lower().isin(["micro", "nano"])
     P["target_month"] = pd.PeriodIndex(P["target_month"], freq="M")
@@ -813,7 +919,7 @@ def evaluate(args):
     pred_cols = [c for c in P.columns if "_" in c and c.rsplit("_", 1)[0] in MODELS]
     run_years = sorted(P["year"].unique())
     for name in ("stage1_tuning.csv", "stage1_timing.csv", "stage1_importance.csv"):
-        drop_stale_years(OUT / name, run_years)
+        drop_other_runs(OUT / name, args.run_id, run_years)
 
     # R2 on four row sets: every row; without nano and micro caps; without the rows whose
     # realised return is beyond +-100%, which carry most of the squared-return total in some
@@ -835,6 +941,25 @@ def evaluate(args):
                              "year": yr, "r2": r2_oos(g["y"].to_numpy(), g[c].to_numpy()), "n": len(g)})
     pd.DataFrame(rows).to_csv(OUT / "stage1_r2.csv", index=False)
 
+    # rank IC, added after the first pass: immune to the return tails and to the
+    # market-level offset that moves the R2
+    ics = []
+    for c in pred_cols:
+        for uname in ("all", "ex_small"):
+            row = {"model": c.rsplit("_", 1)[0], "set": c.rsplit("_", 1)[1], "universe": uname}
+            row.update(rank_ic(P, c, universes[uname]))
+            ics.append(row)
+    ics = pd.DataFrame(ics)
+    ics.to_csv(OUT / "stage1_ic.csv", index=False)
+
+    # the spread behind the cost numbers: by size group, over the test rows (raw
+    # Corwin-Schultz full spread, share floored) and traded-weighted inside the portfolios
+    sp = P.assign(spread=P["spread_raw"].astype(float))
+    panel_sp = sp.groupby("size_grp")["spread"].agg(
+        rows="size", median="median", mean="mean", share_negative=lambda v: (v < 0).mean(),
+        mean_floored=lambda v: v.clip(lower=0).mean()).reset_index()
+    panel_sp.to_csv(OUT / "stage1_spreads_panel.csv", index=False)
+
     dm = []
     for c in pred_cols:
         model, s = c.rsplit("_", 1)
@@ -845,11 +970,17 @@ def evaluate(args):
                        "dm_t": diebold_mariano(P, f"{model}_public", c)})
     pd.DataFrame(dm).to_csv(OUT / "stage1_dm.csv", index=False)
 
-    monthly, summary = {}, []
+    monthly, summary, traded = {}, [], []
     for c in pred_cols:
         for weighting in ("ew", "vw"):
             for universe in ("all", "ex_small"):
                 port = decile_portfolios(P, c, weighting, universe)
+                bs = port.attrs["by_size"]
+                for sg, v in bs.iterrows():
+                    traded.append({"model": c.rsplit("_", 1)[0], "set": c.rsplit("_", 1)[1],
+                                   "weighting": weighting, "universe": universe, "size_grp": sg,
+                                   "traded_weight_share": v["traded"] / bs["traded"].sum(),
+                                   "full_spread_traded_weighted": 2 * v["cost"] / v["traded"] if v["traded"] > 0 else np.nan})
                 key = f"{c}_{weighting}_{universe}"
                 monthly[key + "_gross"] = port["gross"]
                 monthly[key + "_net"] = port["net"]
@@ -862,6 +993,8 @@ def evaluate(args):
                 summary.append(row)
     pd.DataFrame(monthly).to_csv(OUT / "stage1_portfolios_monthly.csv")
     pd.DataFrame(summary).to_csv(OUT / "stage1_portfolio_summary.csv", index=False)
+    traded = pd.DataFrame(traded)
+    traded.to_csv(OUT / "stage1_spreads_traded.csv", index=False)
 
     r2 = pd.DataFrame(rows)
     for uname in universes:
@@ -869,11 +1002,19 @@ def evaluate(args):
         piv = sub.pivot(index="model", columns="set", values="r2") * 100
         print(f"\nout-of-sample R2 (%), pooled, rows: {uname} (n = {int(sub['n'].iloc[0]):,})")
         print(piv.round(3).to_string())
+    print("\nrank IC (monthly Spearman, forecast against realised return), mean and t:")
+    piv = ics.pivot_table(index="model", columns=["universe", "set"], values=["ic_mean", "t"])
+    print(piv.round(3).to_string())
     print("\nportfolios, value-weighted, all stocks, long-short:")
     s = pd.DataFrame(summary)
     s = s[(s["weighting"] == "vw") & (s["universe"] == "all")]
     print(s[["model", "set", "gross_mean_pm", "gross_sharpe", "turnover_pm", "cost_pm", "net_sharpe"]]
           .round(3).to_string(index=False))
+    print("\nCorwin-Schultz full spread over the test rows, by size group:")
+    print(panel_sp.round(4).to_string(index=False))
+    print("\ntraded-weighted full spread inside the Huber VW long-short, by size group:")
+    tw = traded[(traded["model"] == "huber") & (traded["set"] == "full") & (traded["weighting"] == "vw")]
+    print(tw[["universe", "size_grp", "traded_weight_share", "full_spread_traded_weighted"]].round(4).to_string(index=False))
 
 
 # ---------------------------------------------------------------------------------
@@ -923,6 +1064,7 @@ def main():
                          "Huber loss for the trees; forecasts still scored on raw returns")
     ap.add_argument("--crsp-only", action="store_true", help="keep only rows with a CRSP permno")
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--run-id", default=None, help=argparse.SUPPRESS)
     args = ap.parse_args()
     args.models = [m for m in args.models.split(",") if m]
     args.importance_models = args.importance_models.split(",")
@@ -935,9 +1077,13 @@ def main():
         PRIVATE, OUT = DATA / "stage1_synthetic", OUT / "synthetic"
     OUT.mkdir(parents=True, exist_ok=True)
 
+    tag = "synthetic" if args.synthetic else "jkp"
     if args.eval_only:
+        args.run_id = current_run_id()
         evaluate(args)
         return
+    if not args.worker and not args.timing and not args.y_check:
+        args.run_id = start_run(args, tag)
 
     if args.timing:                       # timing needs torch only, so it stays in-process
         args.models = [m for m in args.models if m in NN_MODELS] or ["nn3"]
@@ -953,7 +1099,7 @@ def main():
                     cmd.append("--" + flag.replace("_", "-"))
             cmd += ["--every", str(args.every), "--first-test", str(args.first_test),
                     "--last-test", str(args.last_test), "--device", args.device,
-                    "--importance-models", ",".join(args.importance_models)]
+                    "--importance-models", ",".join(args.importance_models), "--run-id", args.run_id]
             print(f"\n=== worker: {', '.join(g)} ===", flush=True)
             subprocess.run(cmd, check=True)
         evaluate(args)
