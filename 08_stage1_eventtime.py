@@ -2,6 +2,7 @@
 STEP 8 -- what the model uses, in event time around each characteristic's publication.
 
     python 08_stage1_eventtime.py
+    python 08_stage1_eventtime.py --synthetic     # on the output of 07 --synthetic
 
 Reads   output/stage1_importance.csv   (07_stage1_models.py) and jkp_characteristics.csv,
         output/stage1_r2.csv and output/stage1_portfolio_summary.csv for the figures.
@@ -91,6 +92,9 @@ def two_way_fe(df, yvar, xvars, unit="characteristic", time="year"):
 
 
 def main():
+    global OUT
+    if "--synthetic" in sys.argv[1:]:        # the folder a 07 --synthetic run writes to
+        OUT = OUT / "synthetic"
     imp_file = OUT / "stage1_importance.csv"
     if not imp_file.exists():
         sys.exit("output/stage1_importance.csv is missing; run 07_stage1_models.py first")

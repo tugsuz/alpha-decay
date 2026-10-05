@@ -14,6 +14,10 @@ without look-ahead in the choice of characteristics.
 Reads   data/jkp_us/jkp_us_<year>.parquet   (06_jkp_pull.py) and jkp_characteristics.csv.
 Writes  data/stage1/preds_<year>.parquet    stock-level forecasts. These stay on this machine.
         output/stage1_*.csv                 aggregates only: R2, tests, portfolios, importance.
+A --synthetic run writes to data/stage1_synthetic/ and output/synthetic/ instead, so made-up
+forecasts never sit next to real ones. The tables are built from the test years of the
+current run only; forecast files outside that range, or from a different panel, are listed
+and left out.
 
 --------------------------------------------------------------------------------------
 THE DESIGN
@@ -184,7 +188,7 @@ def load_panel(chars: List[str], first: int, last: int,
         avail = [c for c in chars if c in pd.read_parquet(files[0]).columns]
         metas, blocks = [], []
         for f in files:
-            df = pd.read_parquet(f, columns=ID_COLS + avail)
+            df = pd.read_parquet(f, columns=list(dict.fromkeys(ID_COLS + avail)))
             blocks.append(rank_transform_panel(df, avail).to_numpy())
             metas.append(df[ID_COLS])
             print(f"  ranked {f.stem}: {len(df):,} rows", flush=True)
@@ -550,10 +554,14 @@ def run(meta, X, cols, chars, args):
     years = list(range(args.first_test, args.last_test + 1, args.every))
     tuning, timing, imp_rows = [], [], []
     valid = ~np.isnan(meta["y"].to_numpy())
+    tag = "synthetic" if args.synthetic else "jkp"
 
     for y in years:
         pf = pred_path(y)
         existing = load_private(pf) if pf.exists() else None
+        if existing is not None and existing.get("panel", pd.Series([None])).iloc[0] != tag:
+            print(f"{y}: {pf.name} holds forecasts from another panel; it will be replaced", flush=True)
+            existing = None
         wanted = [f"{m}_{s_}" for m in args.models for s_ in ("public", "full")]
         if args.skip_done and existing is not None and all(c in existing.columns for c in wanted):
             print(f"{y}: forecasts on disk, skipping")
@@ -564,6 +572,7 @@ def run(meta, X, cols, chars, args):
             continue
         sets = {"public": [c for c in cols if pub[c] < y], "full": list(cols)}
         out = meta.loc[te, ["id", "eom", "target_month", "size_grp", "me", "half_spread", "y"]].copy()
+        out["panel"] = tag
         ytr, yva = meta.loc[tr, "y"].to_numpy(), meta.loc[va, "y"].to_numpy()
         y_te = out["y"].to_numpy()
         print(f"{y}: train {tr.sum():,} val {va.sum():,} test {te.sum():,} rows; "
@@ -577,13 +586,19 @@ def run(meta, X, cols, chars, args):
                 p = predict(Xte)
                 out[f"{name}_{set_name}"] = p
                 dt = time.time() - t0
-                # scale check: forecasts should be far less dispersed than returns; a ratio
-                # near or above one means the model is fitting noise or is mis-scaled
-                ratio = float(np.std(p) / (np.std(y_te) or 1.0))
+                # two scale checks, both in units of the test-year return sd. The forecasts
+                # should be far less dispersed than returns (ratio well below one), and their
+                # mean should sit near the mean return (offset near zero); a model with a
+                # small ratio and a large offset is mis-centred, which the R2 punishes and a
+                # rank-based portfolio never notices
+                y_sd = float(np.std(y_te) or 1.0)
+                ratio = float(np.std(p) / y_sd)
+                offset = float((np.mean(p) - np.mean(y_te)) / y_sd)
                 tuning.append({"year": y, "set": set_name, "model": name, "setting": str(setting),
-                               "pred_sd_over_y_sd": ratio})
+                               "pred_sd_over_y_sd": ratio, "pred_mean_minus_y_mean_over_y_sd": offset})
                 timing.append({"year": y, "set": set_name, "model": name, "seconds": dt})
-                print(f"   {set_name:<6} {name:<6} {dt:6.0f}s  sd ratio {ratio:.3f}  {setting}", flush=True)
+                print(f"   {set_name:<6} {name:<6} {dt:6.0f}s  sd ratio {ratio:.3f}  offset {offset:+.3f}  {setting}",
+                      flush=True)
                 if set_name == "full" and name in args.importance_models:
                     base = mse(y_te, p)
                     rng = np.random.default_rng(y)
@@ -680,10 +695,30 @@ def summarise(x):
 
 
 def evaluate(args):
-    files = private_files()
+    tag = "synthetic" if args.synthetic else "jkp"
+    files, left_out = [], []
+    for f in private_files():
+        year = int(f.stem.split("_")[-1])
+        if args.first_test <= year <= args.last_test:
+            files.append(f)
+        else:
+            left_out.append(f.name)
     if not files:
-        sys.exit("no forecasts in data/stage1; run the fits first")
-    P = pd.concat((load_private(f) for f in files), ignore_index=True)
+        sys.exit(f"no forecasts for {args.first_test} to {args.last_test} in {PRIVATE}; run the fits first")
+    frames = []
+    for f in files:
+        d = load_private(f)
+        if d.get("panel", pd.Series([None])).iloc[0] == tag:
+            frames.append(d)
+        else:
+            left_out.append(f.name)
+    if left_out:
+        print(f"left out of the tables ({len(left_out)} files outside {args.first_test} to "
+              f"{args.last_test} or from another panel): {', '.join(sorted(left_out))}")
+    if not frames:
+        sys.exit("no forecasts from this panel in the test years; run the fits first")
+    print(f"tables from {len(frames)} forecast files, test years {args.first_test} to {args.last_test}")
+    P = pd.concat(frames, ignore_index=True)
     P["small"] = P["size_grp"].astype(str).str.lower().isin(["micro", "nano"])
     P["target_month"] = pd.PeriodIndex(P["target_month"], freq="M")
     P["year"] = P["target_month"].dt.year
@@ -766,7 +801,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--synthetic", action="store_true", help="made-up panel, no WRDS data")
     ap.add_argument("--smoke", action="store_true",
-                    help="tiny grids, few epochs, test years 2005 to 2007 (public set 58 to 70 of 153)")
+                    help="tiny grids, few epochs, test years 2005 to 2007 (public set 58 to 86 of 153)")
     ap.add_argument("--timing", action="store_true", help="time nn3 on cpu and mps for one year")
     ap.add_argument("--eval-only", action="store_true", help="tables from saved forecasts only")
     ap.add_argument("--skip-done", action="store_true", help="skip test years whose forecasts are already on disk")
@@ -785,7 +820,10 @@ def main():
         args.first_test = 2005 if args.smoke else FIRST_TEST
     if args.last_test is None:
         args.last_test = 2007 if args.smoke else LAST_TEST
-    OUT.mkdir(exist_ok=True)
+    global PRIVATE, OUT
+    if args.synthetic:
+        PRIVATE, OUT = DATA / "stage1_synthetic", OUT / "synthetic"
+    OUT.mkdir(parents=True, exist_ok=True)
 
     if args.eval_only:
         evaluate(args)
