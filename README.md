@@ -36,14 +36,15 @@ series stays at 0.97.
 
 **Forecasting in real time.** Standing in each month from 1995 to 2024 and knowing only
 the signals published by then, a model is asked to predict each published signal's
-return next month. OLS reaches an out-of-sample R² of 0.93% against a zero forecast;
-gradient boosted trees and a small neural network do not beat it, and none of the models
-beats the signal's own historical mean by a margin that a Diebold-Mariano test can
-distinguish from zero. Almost all of the predictive content is in the signal's own return
-history; months since publication adds nothing once that history is in the model.
-Holding every published signal with equal weight earns a Sharpe ratio of 1.34; ranking
-by own historical mean and holding the top fifth earns 1.51; ranking by model forecasts
-raises the mean return and doubles the volatility.
+return next month. A linear regression reaches an out-of-sample R² of 0.84% against a
+zero forecast and gradient boosted trees 0.88%; the difference is not distinguishable
+from zero, a small neural network does worse, and none of the models beats the signal's
+own historical mean by a margin that a Diebold-Mariano test can see. Almost all of the
+predictive content is in the signal's own return history; months since publication adds
+nothing once that history is in the model. Holding every published signal with equal
+weight earns a Sharpe ratio of 1.31; ranking by own historical mean and holding the top
+fifth earns 1.36; ranking by model forecasts raises the mean return and doubles the
+volatility.
 
 ![return against time since publication](output/fig05_decay.png)
 
@@ -73,6 +74,11 @@ and `mthcap` should be used in place of `abs(prc) * shrout`.
 python 02_decay_panel.py        # three-window decay, panel regression; about a second
 python 05_ml_panel.py           # the forecasting section; about ten minutes
 python 05_ml_panel.py figures   # redraw its figures from the saved outputs
+
+python 06_jkp_pull.py --check   # Stage 1: columns and a one-month profile of the JKP panel (WRDS)
+python 06_jkp_pull.py           # the US stock-month panel, one parquet a year
+python 07_stage1_models.py      # stock-level forecasts, public against full information sets
+python 08_stage1_eventtime.py   # what the model uses, in event time around publication
 
 python 03_crsp_pull.py          # CRSP monthly panel from WRDS, by decade, restartable
 python 04_build_anomalies.py    # rebuild Size and Mom12m, score them against Chen and Zimmermann

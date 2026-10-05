@@ -853,7 +853,10 @@ and a neural network with one hidden layer of 16 units, all in scikit-learn
 [@pedregosa2011]. The design follows @gu2020: an expanding window with one refit per
 calendar year, test years 1995 to 2024; hyperparameters chosen on the last eight years
 of each training sample, after which the model is refit on the whole sample; and
-out-of-sample $R^2$ measured against a zero forecast,
+out-of-sample $R^2$ measured against a zero forecast. Time is kept by the target
+month. A test year collects the forecasts whose target month falls in that year, every
+row used to fit or tune the model for it has a target month before January of that
+year, and the code checks that boundary at each refit. The out-of-sample $R^2$ is
 
 $$
 R^2_{\mathrm{oos}} \;=\; 1 - \frac{\sum_{i,t}\bigl(r_{i,t+1} - \hat r_{i,t+1}\bigr)^2}
@@ -912,12 +915,12 @@ plt.show()
 
 Three things stand out in @tbl-ml-r2.
 
-The numbers are small. The best model, OLS, explains
+The numbers are small. The linear regression explains
 `{python} f"{100*r2.loc['ols','r2_vs_zero']:.2f}"` percent of next month's variation,
-and the own-mean benchmark alone explains
-`{python} f"{100*r2.loc['own_mean','r2_vs_zero']:.2f}"` percent. This is the order of
-magnitude @gu2020 report for individual stocks at the monthly horizon; monthly
-long-short returns are mostly noise.
+the trees `{python} f"{100*r2.loc['gbrt','r2_vs_zero']:.2f}"` percent, and the own-mean
+benchmark alone `{python} f"{100*r2.loc['own_mean','r2_vs_zero']:.2f}"` percent. This is
+the order of magnitude @gu2020 report for individual stocks at the monthly horizon;
+monthly long-short returns are mostly noise.
 
 The flexible models do not beat the linear one. Against the own-mean benchmark OLS adds
 `{python} f"{100*r2.loc['ols','r2_vs_own_mean']:.2f}"` percent, the trees
@@ -945,13 +948,24 @@ Markdown("| Feature group | gradient boosted trees | OLS |\n"
          "|------------------------------|------------------:|--------:|\n" + "\n".join(rows))
 ```
 
+```{python}
+#| label: ml-imp-numbers
+#| echo: false
+
+others = imp.drop(index="own history")
+second_name = others["gbrt_mse_increase"].idxmax()
+second_gb = others.loc[second_name, "gbrt_mse_increase"]
+rest_max = others.drop(index=second_name)[["gbrt_mse_increase", "ols_mse_increase"]].abs().max().max()
+```
+
 @tbl-ml-imp says where the predictive content sits. Shuffling the signal's own return
 history raises the test error by `{python} f"{imp.loc['own history','gbrt_mse_increase']:.3f}"`
 for the trees and `{python} f"{imp.loc['own history','ols_mse_increase']:.3f}"` for OLS.
-Shuffling any other group changes the error by less than 0.01, and for several groups
-the error falls, which is what noise looks like under permutation.
-Event time, the paper's own reported evidence, the construction of the portfolio and the
-state of the market add nothing once the signal's own history is in the model.
+The next largest group for the trees is `{python} second_name`, at
+`{python} f"{second_gb:.3f}"`; every other group moves the error by less than
+`{python} f"{rest_max:.3f}"` in either direction, and for several of them the error
+falls, which is what noise looks like under permutation. Event time in particular adds
+nothing once the signal's own history is in the model.
 
 ## The decay curve, conditional and unconditional
 
