@@ -19,6 +19,7 @@ Writes to output/:
                           partial dependence of the fitted models
     ml_tuning.csv         every hyperparameter setting that was tried, by test year
     ml_r2_sensitivity.csv the tree result under each fixed grid setting
+    ml_counts.csv         test rows, months, signals, and first-month rows
     fig05_r2.png, fig05_decay.png, fig05_portfolio.png
 
 --------------------------------------------------------------------------------------
@@ -599,7 +600,14 @@ def main():
     raw = raw_bins(P)
     curve = raw.join(pdep, how="outer")
 
+    counts = pd.DataFrame([{
+        "test_rows": len(P), "test_months": P["target_month"].nunique(),
+        "signals": P["signal"].nunique(),
+        "first_month_rows": int((P["months_since_pub"] == 11).sum()),
+        "first_test_month": str(P["target_month"].min()), "last_test_month": str(P["target_month"].max())}])
+
     OUT.mkdir(exist_ok=True)
+    counts.to_csv(OUT / "ml_counts.csv", index=False)
     r2.to_csv(OUT / "ml_r2.csv")
     sens.to_csv(OUT / "ml_r2_sensitivity.csv", index=False)
     dm.to_csv(OUT / "ml_dm.csv", index=False)

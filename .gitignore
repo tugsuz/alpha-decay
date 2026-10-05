@@ -28,6 +28,7 @@ output/*
 !output/ml_decay_curve.csv
 !output/ml_tuning.csv
 !output/ml_r2_sensitivity.csv
+!output/ml_counts.csv
 
 # Script backups
 *.bak_*

@@ -1104,8 +1104,8 @@ of published anomalies, which is a statement about the data, not a strategy we w
 expect to survive its own publication. And the own-mean Sharpe ratio is sensitive to one
 detail of the universe rule: a signal published in year $y-1$ first enters in the
 December feature month of that year, which forecasts January $y$. Those first-month rows,
-189 in all, carry high historical means, are often selected into the top fifth, and earn
-little; with them the top-fifth Sharpe ratio is `{python} f"{p_own[2]:.2f}"`, and under a
+`{python} int(pd.read_csv(OUT / "ml_counts.csv")["first_month_rows"].iloc[0])` in all, carry
+high historical means, are often selected into the top fifth, and earn little; with them the top-fifth Sharpe ratio is `{python} f"{p_own[2]:.2f}"`, and under a
 rule that admits a signal only from the following February it is
 `{python} f"{perf(port['own_mean_x1_top'])[2]:.2f}"`.
 
