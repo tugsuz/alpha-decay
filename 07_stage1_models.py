@@ -252,7 +252,7 @@ def load_panel(chars: List[str], first: int, last: int,
             meta = load_private(pred_path_like(mfile))
             meta["eom"] = pd.to_datetime(meta["eom"])
             meta["target_month"] = pd.PeriodIndex(meta["target_month"], freq="M")
-            return meta, np.load(xfile), m["cols"]
+            return complete_meta(meta), np.load(xfile), m["cols"]
     if synthetic:
         meta, X, cols = synthetic_panel(chars, first, last)
     else:
@@ -309,6 +309,20 @@ def add_spreads(P: pd.DataFrame) -> pd.DataFrame:
     P = P.drop(columns=["month", "_key"])
     print(f"quoted spread joined on {key}: found for {P['quoted'].notna().mean():.3f} of test rows")
     return P
+
+
+def complete_meta(m: pd.DataFrame) -> pd.DataFrame:
+    """A cached panel written by an earlier version of this script may lack columns that
+    were added since; derive them so the cache does not have to be rebuilt."""
+    if "half_spread_cs" not in m and "half_spread" in m:
+        m["half_spread_cs"] = m["half_spread"]
+    if "spread_raw" not in m and "bidaskhl_21d" in m:
+        m["spread_raw"] = m["bidaskhl_21d"].astype(np.float32)
+    if "crsp" not in m:
+        m["crsp"] = m["permno"].notna() if "permno" in m else True
+    if "permno" not in m:
+        m["permno"] = np.nan
+    return m
 
 
 def prepare_meta(meta: pd.DataFrame) -> pd.DataFrame:
