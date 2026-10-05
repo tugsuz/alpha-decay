@@ -67,6 +67,10 @@ def two_way_fe(df, yvar, xvars, unit="characteristic", time="year"):
         X.append(dummies)
     X = np.hstack(X)
     y = d[yvar].to_numpy(float)
+    assert np.isfinite(X).all() and np.isfinite(y).all(), "non-finite values in the regression inputs"
+    # numpy's matmul on macOS (Accelerate) raises spurious floating-point warnings on
+    # large products; the inputs are checked finite above, so they are silenced here
+    np.seterr(all="ignore")
     XtX_inv = np.linalg.pinv(X.T @ X)
     beta = XtX_inv @ (X.T @ y)
     u = y - X @ beta
@@ -99,6 +103,15 @@ def main():
     if not imp_file.exists():
         sys.exit("output/stage1_importance.csv is missing; run 07_stage1_models.py first")
     imp = pd.read_csv(imp_file)
+    r2_file = OUT / "stage1_r2.csv"
+    if r2_file.exists():                    # the forecast years of the run that built the tables
+        yrs = pd.read_csv(r2_file)["year"]
+        run_years = sorted(set(int(v) for v in yrs[yrs.astype(str) != "all"]))
+        stale = ~imp["year"].isin(run_years)
+        if stale.any():
+            print(f"dropping {stale.sum():,} importance rows from years without forecasts in this run: "
+                  f"{sorted(set(imp.loc[stale, 'year']))}")
+            imp = imp[~stale]
     chars = pd.read_csv(CHARS_FILE).set_index("characteristic")
     imp["pub_year"] = imp["characteristic"].map(chars["pub_year"]).astype(int)
     imp["event_time"] = imp["year"] - imp["pub_year"]
@@ -153,6 +166,8 @@ def main():
     r2_file = OUT / "stage1_r2.csv"
     if r2_file.exists():
         r2 = pd.read_csv(r2_file)
+        if "universe" in r2:
+            r2 = r2[r2["universe"] == "all"]
         r2 = r2[r2["year"].astype(str) != "all"].copy()
         r2["year"] = r2["year"].astype(int)
         fig, ax = plt.subplots(figsize=(7, 4))

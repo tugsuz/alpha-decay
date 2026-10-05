@@ -10,6 +10,8 @@ without look-ahead in the choice of characteristics.
     python 07_stage1_models.py --every 2                # first pass, refit every other year
     python 07_stage1_models.py                          # annual refit, 1995 to 2024
     python 07_stage1_models.py --eval-only              # rebuild the tables from saved forecasts
+    python 07_stage1_models.py --y-check                # tails of the realised returns, by test year
+    python 07_stage1_models.py --every 2 --robust       # clipped fitting target, Huber trees
 
 Reads   data/jkp_us/jkp_us_<year>.parquet   (06_jkp_pull.py) and jkp_characteristics.csv.
 Writes  data/stage1/preds_<year>.parquet    stock-level forecasts. These stay on this machine.
@@ -49,6 +51,16 @@ runtime; loaded into one process they deadlock on the first network. So the scri
 the tree-and-linear models in one child process and the networks in another, each
 importing only what it needs, and merges the forecasts year by year. The ranked panel is
 built once and cached in data/stage1/ so the second worker does not rank again.
+
+The realised returns have a few absurd values (several thousand percent in a month). They
+dominate squared-error sums wherever they fall: a test year with one such row has an R2 of
+about zero for every model, and a training sample with a few of them pulls least-squares
+fits and tree leaves towards those rows. --y-check tabulates them by year. --robust clips
+the fitting and selection targets at the 0.1 and 99.9 percentiles of the training returns
+and gives the trees a Huber objective; the Huber regression keeps the raw target, since its
+loss is the protection. Forecasts are always scored against the raw realised returns, and
+the R2 tables are reported on four row sets: all rows, without nano and micro caps, without
+rows whose realised return is beyond +-100%, and rows with a CRSP return.
 
 Outputs: out-of-sample R2 against a zero forecast, pooled and by year; Diebold-Mariano
 statistics on monthly cross-sectional loss differences with a Newey-West variance; decile
@@ -91,7 +103,8 @@ PATIENCE = 5
 
 MODELS = ["huber", "enet", "pcr", "pls", "gbrt", "nn1", "nn2", "nn3"]
 IMPORTANCE_MODELS = ["huber", "gbrt", "nn3"]
-ID_COLS = ["id", "eom", "size_grp", "me", "ret_exc_lead1m", "bidaskhl_21d"]
+ID_COLS = ["id", "eom", "permno", "prc", "size_grp", "me", "ret_exc_lead1m", "bidaskhl_21d"]
+PANEL_VERSION = 2          # bump when the cached panel's columns change
 
 import importlib.util
 import json
@@ -170,10 +183,10 @@ def load_panel(chars: List[str], first: int, last: int,
     tag = "synthetic" if synthetic else "jkp"
     manifest = PRIVATE / f"panel_{tag}.json"
     xfile, mfile = PRIVATE / f"panel_{tag}_X.npy", PRIVATE / f"panel_{tag}_meta.parquet"
-    want = {"first": first, "last": last}
+    want = {"first": first, "last": last, "version": PANEL_VERSION}
     if not rebuild and manifest.exists() and xfile.exists():
         m = json.loads(manifest.read_text())
-        if m.get("first") == first and m.get("last") == last:
+        if m.get("first") == first and m.get("last") == last and m.get("version") == PANEL_VERSION:
             meta = load_private(pred_path_like(mfile))
             meta["eom"] = pd.to_datetime(meta["eom"])
             meta["target_month"] = pd.PeriodIndex(meta["target_month"], freq="M")
@@ -213,6 +226,7 @@ def prepare_meta(meta: pd.DataFrame) -> pd.DataFrame:
     # rebate, so the charge is floored at zero
     m["half_spread"] = (m["bidaskhl_21d"].clip(lower=0) / 2).astype(np.float32)
     m["small"] = m["size_grp"].astype(str).str.lower().isin(["micro", "nano"])
+    m["crsp"] = m["permno"].notna() if "permno" in m else True
     return m
 
 
@@ -249,10 +263,16 @@ def synthetic_panel(chars: List[str], first: int, last: int,
             pub = int(info.loc[c, "pub_year"])
             b = 0.01 if m.year < pub else 0.003
             y += b * z[:, j]
+        # a few absurd returns, as in the real panel: about one row in 5,000 gets a
+        # return between 500% and 50,000%
+        wild = rng.random(n) < 0.0002
+        y[wild] = rng.uniform(5, 500, wild.sum()).astype(np.float32)
         me = np.exp(rng.normal(6, 2, n)).astype(np.float32)
+        permno = np.where(rng.random(n) < 0.06, np.nan, np.arange(n) + 10000).astype(np.float32)
         q = pd.qcut(me, [0, .2, .5, .8, .95, 1], labels=["nano", "micro", "small", "large", "mega"])
         rows.append(pd.DataFrame({
             "id": np.arange(n), "eom": m.to_timestamp(how="end").normalize(),
+            "permno": permno, "prc": np.exp(rng.normal(2.5, 1.2, n)).astype(np.float32),
             "size_grp": q.astype(str), "me": me, "ret_exc_lead1m": y,
             "bidaskhl_21d": rng.normal(0.01, 0.01, n).astype(np.float32)}))
         blocks.append(z)
@@ -349,17 +369,23 @@ def fit_pls(Xtr, ytr, Xva, yva, smoke=False, max_rows=1_500_000):
     return (lambda Z: m.predict(Z).ravel().astype(np.float32)), {"K": K}
 
 
-def fit_gbrt(Xtr, ytr, Xva, yva, smoke=False):
+def fit_gbrt(Xtr, ytr, Xva, yva, smoke=False, robust=False):
+    """With robust=True LightGBM minimises a Huber loss whose threshold is 1.345 robust
+    standard deviations of the training target (Gu, Kelly and Xiu's GBRT+H)."""
     best = None
     grid = [(2, 0.1)] if smoke else [(d, lr) for d in (2, 3) for lr in (0.05, 0.1)]
     for depth, lr in grid:
         if HAVE_LGB:
             import lightgbm as lgb
+            loss = {}
+            if robust:
+                mad = float(np.median(np.abs(ytr - np.median(ytr)))) * 1.4826
+                loss = {"objective": "huber", "alpha": 1.345 * (mad or float(np.std(ytr)))}
             m = lgb.LGBMRegressor(max_depth=depth, num_leaves=2 ** depth, learning_rate=lr,
                                   n_estimators=50 if smoke else 1000, subsample=0.5,
                                   subsample_freq=1, colsample_bytree=0.5,
                                   min_child_samples=500, reg_lambda=1.0, verbose=-1,
-                                  random_state=0)
+                                  random_state=0, **loss)
             m.fit(Xtr, ytr, eval_set=[(Xva, yva)],
                   callbacks=[lgb.early_stopping(50, verbose=False)])
             n_best = int(m.best_iteration_ or m.n_estimators)
@@ -508,7 +534,7 @@ def fit_nn_sklearn(Xtr, ytr, Xva, yva, layers, smoke=False, seeds=SEEDS):
         {"alpha": alpha, "epochs": eps}
 
 
-def fit_model(name, Xtr, ytr, Xva, yva, device, smoke):
+def fit_model(name, Xtr, ytr, Xva, yva, device, smoke, robust=False):
     if name == "huber":
         return fit_huber(Xtr, ytr, Xva, yva, smoke)
     if name == "enet":
@@ -518,7 +544,7 @@ def fit_model(name, Xtr, ytr, Xva, yva, device, smoke):
     if name == "pls":
         return fit_pls(Xtr, ytr, Xva, yva, smoke)
     if name == "gbrt":
-        return fit_gbrt(Xtr, ytr, Xva, yva, smoke)
+        return fit_gbrt(Xtr, ytr, Xva, yva, smoke, robust)
     if name in ("nn1", "nn2", "nn3"):
         if HAVE_TORCH:
             return fit_nn_torch(Xtr, ytr, Xva, yva, nn_layers(name), device, smoke)
@@ -568,21 +594,37 @@ def run(meta, X, cols, chars, args):
             continue
         tr, va, te = splits(meta, y)
         tr &= valid; va &= valid; te &= valid
+        if args.crsp_only:
+            crsp = meta["crsp"].to_numpy()
+            tr &= crsp; va &= crsp; te &= crsp
         if te.sum() == 0:
             continue
         sets = {"public": [c for c in cols if pub[c] < y], "full": list(cols)}
-        out = meta.loc[te, ["id", "eom", "target_month", "size_grp", "me", "half_spread", "y"]].copy()
+        out = meta.loc[te, ["id", "eom", "target_month", "size_grp", "me", "half_spread", "y", "crsp"]].copy()
         out["panel"] = tag
         ytr, yva = meta.loc[tr, "y"].to_numpy(), meta.loc[va, "y"].to_numpy()
         y_te = out["y"].to_numpy()
+        # --robust: the fitting and selection targets are clipped at the 0.1 and 99.9
+        # percentiles of the training returns (nothing from the test year is used); the
+        # Huber regression keeps the raw training target, its loss is the protection.
+        # Forecasts are always scored against the raw returns.
+        if args.robust:
+            lo, hi = np.quantile(ytr, [0.001, 0.999])
+            ytr_fit, yva_fit = np.clip(ytr, lo, hi), np.clip(yva, lo, hi)
+            clipped = int((ytr < lo).sum() + (ytr > hi).sum())
+        else:
+            lo, hi, ytr_fit, yva_fit, clipped = np.nan, np.nan, ytr, yva, 0
         print(f"{y}: train {tr.sum():,} val {va.sum():,} test {te.sum():,} rows; "
-              f"public set {len(sets['public'])} of {len(cols)}", flush=True)
+              f"public set {len(sets['public'])} of {len(cols)}"
+              + (f"; training target clipped to [{lo:+.3f}, {hi:+.3f}] ({clipped:,} rows)" if args.robust else ""),
+              flush=True)
         for set_name, scols in sets.items():
             j = [col_idx[c] for c in scols]
             Xtr, Xva, Xte = X[tr][:, j], X[va][:, j], X[te][:, j]
             for name in args.models:
                 t0 = time.time()
-                predict, setting = fit_model(name, Xtr, ytr, Xva, yva, args.device, args.smoke)
+                predict, setting = fit_model(name, Xtr, ytr if name == "huber" else ytr_fit, Xva, yva_fit,
+                                             args.device, args.smoke, args.robust)
                 p = predict(Xte)
                 out[f"{name}_{set_name}"] = p
                 dt = time.time() - t0
@@ -595,7 +637,9 @@ def run(meta, X, cols, chars, args):
                 ratio = float(np.std(p) / y_sd)
                 offset = float((np.mean(p) - np.mean(y_te)) / y_sd)
                 tuning.append({"year": y, "set": set_name, "model": name, "setting": str(setting),
-                               "pred_sd_over_y_sd": ratio, "pred_mean_minus_y_mean_over_y_sd": offset})
+                               "pred_sd_over_y_sd": ratio, "pred_mean_minus_y_mean_over_y_sd": offset,
+                               "robust": bool(args.robust), "clip_lo": lo, "clip_hi": hi,
+                               "train_rows_clipped": clipped, "crsp_only": bool(args.crsp_only)})
                 timing.append({"year": y, "set": set_name, "model": name, "seconds": dt})
                 print(f"   {set_name:<6} {name:<6} {dt:6.0f}s  sd ratio {ratio:.3f}  offset {offset:+.3f}  {setting}",
                       flush=True)
@@ -634,6 +678,50 @@ def merge_csv(path, new, keys):
 
 def r2_oos(y, p):
     return 1 - np.sum((y - p) ** 2) / np.sum(y ** 2)
+
+
+def drop_stale_years(path, years):
+    """Keep only the rows of a per-year csv that belong to this run's forecast years."""
+    if not path.exists():
+        return
+    d = pd.read_csv(path)
+    keep = d["year"].isin(years)
+    if (~keep).any():
+        print(f"{path.name}: dropped {(~keep).sum():,} rows from years outside this run "
+              f"({', '.join(str(v) for v in sorted(set(d.loc[~keep, 'year'])))})")
+        d[keep].to_csv(path, index=False)
+
+
+def target_check(meta, path):
+    """What the realised next-month returns look like, test year by test year: how heavy
+    the tails are and how much of the squared-return total a handful of rows carry.
+    Aggregates only."""
+    d = meta[~np.isnan(meta["y"].to_numpy())]
+    rows = []
+    for yr, g in d.groupby("target_year"):
+        if yr < FIRST_TEST or yr > LAST_TEST:
+            continue
+        y = g["y"].to_numpy(np.float64)
+        ay = np.abs(y)
+        top = np.sort(y ** 2)[::-1]
+        ext = ay > 1
+        rows.append({"year": int(yr), "n": len(y), "mean": y.mean(), "sd": y.std(), "min": y.min(),
+                     "max": y.max(), "q001": np.quantile(y, 0.001), "q999": np.quantile(y, 0.999),
+                     "n_abs_gt_1": int(ext.sum()), "n_abs_gt_5": int((ay > 5).sum()),
+                     "n_abs_gt_10": int((ay > 10).sum()),
+                     "share_sq_top1": top[0] / top.sum(), "share_sq_top10": top[:10].sum() / top.sum(),
+                     "share_sq_abs_gt_1": (y[ext] ** 2).sum() / top.sum(),
+                     "ext_share_no_permno": float((~g["crsp"].to_numpy()[ext]).mean()) if ext.any() else np.nan,
+                     "ext_share_small": float(g["small"].to_numpy()[ext].mean()) if ext.any() else np.nan,
+                     "ext_share_prc_lt_1": float((g["prc"].to_numpy()[ext] < 1).mean()) if ext.any() else np.nan,
+                     "share_no_permno": float((~g["crsp"].to_numpy()).mean())})
+    t = pd.DataFrame(rows)
+    t.to_csv(path, index=False)
+    with pd.option_context("display.width", 200):
+        print(t[["year", "n", "sd", "max", "q999", "n_abs_gt_1", "n_abs_gt_10", "share_sq_top1",
+                 "share_sq_top10", "share_sq_abs_gt_1", "ext_share_no_permno", "ext_share_small",
+                 "ext_share_prc_lt_1"]].round(3).to_string(index=False))
+    print(f"wrote {path}")
 
 
 def nw_var(d, lags=12):
@@ -723,14 +811,28 @@ def evaluate(args):
     P["target_month"] = pd.PeriodIndex(P["target_month"], freq="M")
     P["year"] = P["target_month"].dt.year
     pred_cols = [c for c in P.columns if "_" in c and c.rsplit("_", 1)[0] in MODELS]
-    y = P["y"].to_numpy()
+    run_years = sorted(P["year"].unique())
+    for name in ("stage1_tuning.csv", "stage1_timing.csv", "stage1_importance.csv"):
+        drop_stale_years(OUT / name, run_years)
 
-    rows = [{"model": c.rsplit("_", 1)[0], "set": c.rsplit("_", 1)[1], "year": "all",
-             "r2": r2_oos(y, P[c].to_numpy()), "n": len(P)} for c in pred_cols]
-    for yr, g in P.groupby("year"):
+    # R2 on four row sets: every row; without nano and micro caps; without the rows whose
+    # realised return is beyond +-100%, which carry most of the squared-return total in some
+    # years; and the rows with a CRSP return. The paper reports all four.
+    universes = {"all": np.ones(len(P), bool), "ex_small": ~P["small"].to_numpy(),
+                 "abs_y_le_1": (P["y"].abs() <= 1).to_numpy()}
+    if "crsp" in P:
+        universes["crsp"] = P["crsp"].fillna(False).to_numpy().astype(bool)
+    rows = []
+    for uname, mask in universes.items():
+        sub = P[mask]
+        y = sub["y"].to_numpy()
         for c in pred_cols:
-            rows.append({"model": c.rsplit("_", 1)[0], "set": c.rsplit("_", 1)[1], "year": yr,
-                         "r2": r2_oos(g["y"].to_numpy(), g[c].to_numpy()), "n": len(g)})
+            rows.append({"model": c.rsplit("_", 1)[0], "set": c.rsplit("_", 1)[1], "universe": uname,
+                         "year": "all", "r2": r2_oos(y, sub[c].to_numpy()), "n": len(sub)})
+        for yr, g in sub.groupby("year"):
+            for c in pred_cols:
+                rows.append({"model": c.rsplit("_", 1)[0], "set": c.rsplit("_", 1)[1], "universe": uname,
+                             "year": yr, "r2": r2_oos(g["y"].to_numpy(), g[c].to_numpy()), "n": len(g)})
     pd.DataFrame(rows).to_csv(OUT / "stage1_r2.csv", index=False)
 
     dm = []
@@ -762,9 +864,11 @@ def evaluate(args):
     pd.DataFrame(summary).to_csv(OUT / "stage1_portfolio_summary.csv", index=False)
 
     r2 = pd.DataFrame(rows)
-    piv = r2[r2["year"] == "all"].pivot(index="model", columns="set", values="r2") * 100
-    print("\nout-of-sample R2 (%), pooled:")
-    print(piv.round(3).to_string())
+    for uname in universes:
+        sub = r2[(r2["year"] == "all") & (r2["universe"] == uname)]
+        piv = sub.pivot(index="model", columns="set", values="r2") * 100
+        print(f"\nout-of-sample R2 (%), pooled, rows: {uname} (n = {int(sub['n'].iloc[0]):,})")
+        print(piv.round(3).to_string())
     print("\nportfolios, value-weighted, all stocks, long-short:")
     s = pd.DataFrame(summary)
     s = s[(s["weighting"] == "vw") & (s["universe"] == "all")]
@@ -812,6 +916,12 @@ def main():
     ap.add_argument("--models", default=",".join(MODELS))
     ap.add_argument("--importance-models", default=",".join(IMPORTANCE_MODELS))
     ap.add_argument("--device", default="cpu", help="cpu or mps, for the networks")
+    ap.add_argument("--y-check", action="store_true",
+                    help="describe the realised returns by test year (tails, concentration) and stop")
+    ap.add_argument("--robust", action="store_true",
+                    help="clip the fitting and selection targets at the training 0.1/99.9 percentiles; "
+                         "Huber loss for the trees; forecasts still scored on raw returns")
+    ap.add_argument("--crsp-only", action="store_true", help="keep only rows with a CRSP permno")
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
     args.models = [m for m in args.models.split(",") if m]
@@ -831,12 +941,14 @@ def main():
 
     if args.timing:                       # timing needs torch only, so it stays in-process
         args.models = [m for m in args.models if m in NN_MODELS] or ["nn3"]
+    if args.y_check:                      # no fitting, so no worker split
+        args.models = ["huber"]
     groups = worker_groups(args.models)
     if not args.worker and len(groups) > 1:
         # one child per group, so LightGBM's OpenMP and torch's never meet in one process
         for g in groups:
             cmd = [sys.executable, str(Path(__file__).resolve()), "--worker", "--models", ",".join(g)]
-            for flag in ("synthetic", "smoke", "skip_done", "rebuild_panel"):
+            for flag in ("synthetic", "smoke", "skip_done", "rebuild_panel", "robust", "crsp_only"):
                 if getattr(args, flag):
                     cmd.append("--" + flag.replace("_", "-"))
             cmd += ["--every", str(args.every), "--first-test", str(args.first_test),
@@ -858,6 +970,9 @@ def main():
 
     if args.timing:
         timing_run(meta, X, cols, args)
+        return
+    if args.y_check:
+        target_check(meta, OUT / "stage1_target.csv")
         return
     run(meta, X, cols, chars[chars["characteristic"].isin(cols)], args)
     if args.worker:
