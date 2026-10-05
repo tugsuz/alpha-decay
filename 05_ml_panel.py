@@ -36,6 +36,10 @@ So a signal enters the panel, for training and for testing, only in years after 
 publication year. That is the whole of the no-look-ahead rule and it costs most of the
 pre-1995 sample, when fewer than two dozen signals were public.
 
+Time is kept by the target month. A test year holds the forecasts whose target month
+falls in that year; the model for it is fit on rows whose target month is earlier, and
+an assert checks the boundary at every refit.
+
 Models. Two benchmarks that fit nothing (a zero forecast and the signal's own historical
 mean), a linear regression, an elastic net, gradient boosted trees and a small neural
 network. Every model sees the same features. Hyperparameters are chosen on the last
@@ -161,6 +165,11 @@ def build_panel(rets, chars):
     panel = panel.join(state, how="left")
     panel = panel.join(chars, on="signal")
     panel["year"] = panel.index.year
+    # The target is next month's return, so a row's forecast date is the month after
+    # its feature month. Test years, training cut-offs and the no-look-ahead assert all
+    # work on the target month, never on the feature month.
+    panel["target_month"] = panel.index + 1
+    panel["target_year"] = panel["target_month"].dt.year
     panel.index.name = "month"
     panel = panel.reset_index()
     # a row needs 60 months of own history and a target; the universe rule is applied
@@ -303,12 +312,15 @@ def run(panel):
     fitted = {}      # year -> {model: predict function}, kept for the diagnostics
     t0 = time.time()
     for y in range(FIRST_TEST_YEAR, LAST_TEST_YEAR + 1):
-        known = panel[panel["pub_year"] < y]            # the universe at the start of y
-        train = known[known["year"] <= y - 1]           # targets observed by December y-1
-        test = known[known["year"] == y]
+        known = panel[panel["pub_year"] < y]            # the universe known at the start of y
+        train = known[known["target_year"] <= y - 1]      # every target observed by December y-1
+        test = known[known["target_year"] == y]           # forecasts for January to December y
         if len(test) == 0:
             continue
-        va_mask = train["year"] >= y - VALIDATION_YEARS
+        # the boundary: nothing in training may have a target month at or after the first
+        # test month
+        assert train["target_month"].max() < test["target_month"].min(), y
+        va_mask = train["target_year"] >= y - VALIDATION_YEARS
         Xtr, ytr = train.loc[~va_mask, FEATURES].to_numpy(), train.loc[~va_mask, "target"].to_numpy()
         Xva, yva = train.loc[va_mask, FEATURES].to_numpy(), train.loc[va_mask, "target"].to_numpy()
         Xall, yall = train[FEATURES].to_numpy(), train["target"].to_numpy()
@@ -323,7 +335,7 @@ def run(panel):
         for name, setting, mse in log:
             tuning.append({"test_year": y, "model": name, "setting": setting, "val_mse": mse})
 
-        out = test[["signal", "month", "year", "target", "months_since_pub", "mean_all"]].copy()
+        out = test[["signal", "month", "target_month", "target", "months_since_pub", "mean_all"]].copy()
         out["zero"] = 0.0
         out["own_mean"] = test["mean_all"].to_numpy()
         out["ols"] = f_ols(Xte)
@@ -364,14 +376,14 @@ def diebold_mariano(P, a, b):
     Newey-West variance. Positive means model b has the lower loss."""
     la = (P["target"] - P[a]) ** 2
     lb = (P["target"] - P[b]) ** 2
-    d = (la - lb).groupby(P["month"]).mean().to_numpy()
+    d = (la - lb).groupby(P["target_month"]).mean().to_numpy()
     return d.mean() / np.sqrt(nw_var(d, NW_LAGS))
 
 
 def portfolios(P, model):
     """Each month, long the top fifth of signals by forecast, short the bottom fifth."""
     rows = []
-    for m, g in P.groupby("month"):
+    for m, g in P.groupby("target_month"):
         if len(g) < 10:
             continue
         q = pd.qcut(g[model].rank(method="first"), 5, labels=False)
@@ -398,7 +410,7 @@ def importance(panel, P, fitted):
         for grp, cols in GROUPS.items():
             sse = 0.0
             for y, fs in fitted.items():
-                test = panel[(panel["pub_year"] < y) & (panel["year"] == y)]
+                test = panel[(panel["pub_year"] < y) & (panel["target_year"] == y)]
                 X = test[FEATURES].to_numpy().copy()
                 for c in cols:
                     j = FEATURES.index(c)
@@ -418,7 +430,7 @@ def decay_curve(panel, fitted):
     moves months_since_pub (and the indicators that depend on it) across a grid and
     averages the prediction over the training rows' other features."""
     y = LAST_TEST_YEAR
-    train = panel[(panel["pub_year"] < y) & (panel["year"] <= y - 1)]
+    train = panel[(panel["pub_year"] < y) & (panel["target_year"] <= y - 1)]
     X0 = train[FEATURES].to_numpy()
     j_pub = FEATURES.index("months_since_pub")
     j_post = FEATURES.index("post_pub")
