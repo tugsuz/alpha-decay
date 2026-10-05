@@ -109,7 +109,8 @@ def table_columns(db) -> pd.DataFrame:
 
 def select_list(available: set[str]) -> tuple[list[str], list[str]]:
     """The columns to pull, and the ones we wanted that the table does not have."""
-    wanted = ID_COLUMNS + characteristic_names()
+    wanted = list(dict.fromkeys(ID_COLUMNS + characteristic_names()))   # unique, in order
+    assert len(wanted) == len(set(wanted))
     have = [c for c in wanted if c in available]
     missing = [c for c in wanted if c not in available]
     return have, missing
@@ -123,7 +124,10 @@ def check(db) -> None:
     print(f"{TABLE}: {len(cols)} columns, list written to data/jkp_columns.txt")
 
     have, missing = select_list(set(cols["column_name"]))
-    print(f"  requested {len(ID_COLUMNS) + 153}, present {len(have)}, missing {len(missing)}")
+    overlap = sorted(set(ID_COLUMNS) & set(characteristic_names()))
+    print(f"  requested {len(have) + len(missing)} distinct columns, present {len(have)}, "
+          f"missing {len(missing)}; {len(overlap)} serve as both identifier and characteristic: "
+          f"{', '.join(overlap)}")
     if missing:
         print("  missing:", ", ".join(missing))
 
@@ -157,6 +161,7 @@ def check(db) -> None:
 
 def profile(df: pd.DataFrame) -> pd.DataFrame:
     """One row per column: dtype, non-missing share, mean, sd and five quantiles."""
+    assert df.columns.is_unique, "duplicate column names in the pulled frame"
     rows = {}
     n = len(df)
     for c in df.columns:
