@@ -68,6 +68,12 @@ panel, versions). The tables are built only from rows carrying the current id. -
 continues the run in the manifest; without it a new run starts, the previous run's tables
 are copied to output/runs/<id>/, and its rows are dropped from the live tables.
 
+Costs. Each traded dollar is charged half a spread. The spread is the month's mean CRSP
+closing quoted spread (09_spreads.py) where a stock-month has one, and JKP's Corwin-Schultz
+estimate where it does not; the tables report both the cost on that series and the cost on
+Corwin-Schultz alone, the share of traded weight priced from quotes, and the two spreads by
+size group, with Abdi-Ranaldo as a third reading.
+
 Outputs: out-of-sample R2 against a zero forecast, pooled and by year; rank IC (monthly
 Spearman between forecast and realised return, all rows and ex nano/micro); Diebold-Mariano
 statistics on monthly cross-sectional loss differences with a Newey-West variance; decile
@@ -111,7 +117,8 @@ PATIENCE = 5
 MODELS = ["huber", "enet", "pcr", "pls", "gbrt", "nn1", "nn2", "nn3"]
 IMPORTANCE_MODELS = ["huber", "gbrt", "nn3"]
 ID_COLS = ["id", "eom", "permno", "prc", "size_grp", "me", "ret_exc_lead1m", "bidaskhl_21d", "source_crsp"]
-PANEL_VERSION = 3          # bump when the cached panel's columns change
+PANEL_VERSION = 4          # bump when the cached panel's columns change
+SPREADS = DATA / "spreads"  # 09_spreads.py: monthly quoted and Abdi-Ranaldo spreads by permno
 
 import importlib.util
 import json
@@ -263,7 +270,9 @@ def load_panel(chars: List[str], first: int, last: int,
             blocks.append(rank_transform_panel(df, avail).to_numpy())
             metas.append(df[ID_COLS])
             print(f"  ranked {f.stem}: {len(df):,} rows", flush=True)
-        meta, X, cols = prepare_meta(pd.concat(metas, ignore_index=True)), np.vstack(blocks), avail
+        meta = pd.concat(metas, ignore_index=True)
+        meta = add_spreads(meta)
+        meta, X, cols = prepare_meta(meta), np.vstack(blocks), avail
     np.save(xfile, X)
     save_private(meta.assign(target_month=meta["target_month"].astype(str)), mfile)
     manifest.write_text(json.dumps({**want, "cols": cols}))
@@ -274,15 +283,44 @@ def pred_path_like(p: Path) -> Path:
     return p if p.exists() or not p.with_suffix(".csv").exists() else p.with_suffix(".csv")
 
 
+def add_spreads(meta: pd.DataFrame) -> pd.DataFrame:
+    """Join the monthly quoted and Abdi-Ranaldo spreads from 09_spreads.py on permno and
+    the month of eom. Without the files the columns are missing and the costs fall back to
+    Corwin-Schultz throughout."""
+    files = sorted(SPREADS.glob("spreads_*.parquet"))
+    if not files:
+        print("  no spread files in data/spreads; costs use Corwin-Schultz only", flush=True)
+        return meta
+    sp = pd.concat((pd.read_parquet(f, columns=["permno", "month", "quoted", "ar", "n_quoted"]) for f in files),
+                   ignore_index=True)
+    sp = sp[sp["n_quoted"] >= 5]              # a month needs five quoted days to count
+    sp["month"] = pd.to_datetime(sp["month"]).dt.to_period("M")
+    sp["permno"] = sp["permno"].astype("float64")
+    m = meta.copy()
+    m["month"] = pd.to_datetime(m["eom"]).dt.to_period("M")
+    m["permno"] = m["permno"].astype("float64")
+    m = m.merge(sp.drop(columns="n_quoted"), on=["permno", "month"], how="left").drop(columns="month")
+    print(f"  quoted spread found for {m['quoted'].notna().mean():.3f} of rows", flush=True)
+    return m
+
+
 def prepare_meta(meta: pd.DataFrame) -> pd.DataFrame:
     m = meta.copy()
     m["eom"] = pd.to_datetime(m["eom"])
     m["target_month"] = m["eom"].dt.to_period("M") + 1
     m["target_year"] = m["target_month"].dt.year.astype(int)
     m["y"] = m["ret_exc_lead1m"].astype(np.float32)
-    # Corwin-Schultz estimates can come out negative; a negative spread is noise, not a
-    # rebate, so the charge is floored at zero
-    m["half_spread"] = (m["bidaskhl_21d"].clip(lower=0) / 2).astype(np.float32)
+    # Two spreads. Corwin-Schultz (JKP's bidaskhl_21d) can come out negative; a negative
+    # spread is noise, not a rebate, so it is floored at zero. The quoted spread from CRSP's
+    # closing bid and ask (09_spreads.py) is the one the costs use where it exists; the
+    # Corwin-Schultz figure fills the stock-months without a quote.
+    m["half_spread_cs"] = (m["bidaskhl_21d"].clip(lower=0) / 2).astype(np.float32)
+    if "quoted" not in m:
+        m["quoted"] = np.nan
+    if "ar" not in m:
+        m["ar"] = np.nan
+    m["half_spread"] = np.where(m["quoted"].notna(), m["quoted"] / 2, m["half_spread_cs"]).astype(np.float32)
+    m["spread_source"] = np.where(m["quoted"].notna(), "quoted", "cs")
     m["small"] = m["size_grp"].astype(str).str.lower().isin(["micro", "nano"])
     # a CRSP return: JKP's source flag when the column is there, else a permno
     if "source_crsp" in m and m["source_crsp"].notna().any():
@@ -339,7 +377,9 @@ def synthetic_panel(chars: List[str], first: int, last: int,
             "permno": permno, "prc": np.exp(rng.normal(2.5, 1.2, n)).astype(np.float32),
             "source_crsp": source,
             "size_grp": q.astype(str), "me": me, "ret_exc_lead1m": y,
-            "bidaskhl_21d": rng.normal(0.01, 0.01, n).astype(np.float32)}))
+            "bidaskhl_21d": rng.normal(0.01, 0.01, n).astype(np.float32),
+            "quoted": np.where(rng.random(n) < 0.9, np.abs(rng.normal(0.006, 0.004, n)), np.nan).astype(np.float32),
+            "ar": np.abs(rng.normal(0.007, 0.005, n)).astype(np.float32)}))
         blocks.append(z)
     meta = pd.concat(rows, ignore_index=True)
     return prepare_meta(meta), np.vstack(blocks), list(chars)
@@ -666,8 +706,8 @@ def run(meta, X, cols, chars, args):
         if te.sum() == 0:
             continue
         sets = {"public": [c for c in cols if pub[c] < y], "full": list(cols)}
-        out = meta.loc[te, ["id", "eom", "target_month", "size_grp", "me", "half_spread", "spread_raw",
-                            "y", "crsp"]].copy()
+        out = meta.loc[te, ["id", "eom", "target_month", "size_grp", "me", "half_spread", "half_spread_cs",
+                            "spread_source", "spread_raw", "quoted", "ar", "y", "crsp"]].copy()
         out["panel"] = tag
         out["run_id"] = args.run_id
         ytr, yva = meta.loc[tr, "y"].to_numpy(), meta.loc[va, "y"].to_numpy()
@@ -861,22 +901,32 @@ def decile_portfolios(P, col, weighting="ew", universe="all"):
         w = pd.concat([w_top, -w_bot])
         ret = float((w_top * top.set_index("id")["y"]).sum() - (w_bot * bot.set_index("id")["y"]).sum())
         if prev_w is None:
-            turn, cost = np.nan, np.nan
+            turn, cost, cost_cs, quoted_share = np.nan, np.nan, np.nan, np.nan
         else:
             dw = w.sub(prev_w, fill_value=0.0)
+            adw = dw.abs()
             gi = g.set_index("id")
             hs = gi["half_spread"].reindex(dw.index)
             hs = hs.fillna(hs.median() if hs.notna().any() else 0.0)
-            turn = float(dw.abs().sum() / 2)
-            cost = float((dw.abs() * hs).sum())
+            hs_cs = gi["half_spread_cs"].reindex(dw.index)
+            hs_cs = hs_cs.fillna(hs_cs.median() if hs_cs.notna().any() else 0.0)
+            is_q = (gi["spread_source"].reindex(dw.index) == "quoted")
+            turn = float(adw.sum() / 2)
+            cost = float((adw * hs).sum())
+            cost_cs = float((adw * hs_cs).sum())
+            quoted_share = float((adw * is_q).sum() / adw.sum()) if adw.sum() > 0 else np.nan
             sg = gi["size_grp"].astype(str).reindex(dw.index).fillna("left_universe")
-            for k, (t_, c_) in pd.DataFrame({"t": dw.abs(), "c": dw.abs() * hs}).groupby(sg).sum().iterrows():
-                acc = by_size.setdefault(k, [0.0, 0.0]); acc[0] += t_; acc[1] += c_
-        rows.append({"target_month": m, "gross": ret, "turnover": turn, "cost": cost})
+            parts = pd.DataFrame({"t": adw, "c": adw * hs, "c_cs": adw * hs_cs, "tq": adw * is_q}).groupby(sg).sum()
+            for k, r_ in parts.iterrows():
+                acc = by_size.setdefault(k, [0.0, 0.0, 0.0, 0.0])
+                acc[0] += r_["t"]; acc[1] += r_["c"]; acc[2] += r_["c_cs"]; acc[3] += r_["tq"]
+        rows.append({"target_month": m, "gross": ret, "turnover": turn, "cost": cost, "cost_cs": cost_cs,
+                     "quoted_share": quoted_share})
         prev_w = w
     out = pd.DataFrame(rows).set_index("target_month")
     out["net"] = out["gross"] - out["cost"].fillna(0)
-    out.attrs["by_size"] = pd.DataFrame(by_size, index=["traded", "cost"]).T
+    out["net_cs"] = out["gross"] - out["cost_cs"].fillna(0)
+    out.attrs["by_size"] = pd.DataFrame(by_size, index=["traded", "cost", "cost_cs", "traded_quoted"]).T
     return out
 
 
@@ -952,12 +1002,14 @@ def evaluate(args):
     ics = pd.DataFrame(ics)
     ics.to_csv(OUT / "stage1_ic.csv", index=False)
 
-    # the spread behind the cost numbers: by size group, over the test rows (raw
-    # Corwin-Schultz full spread, share floored) and traded-weighted inside the portfolios
-    sp = P.assign(spread=P["spread_raw"].astype(float))
-    panel_sp = sp.groupby("size_grp")["spread"].agg(
-        rows="size", median="median", mean="mean", share_negative=lambda v: (v < 0).mean(),
-        mean_floored=lambda v: v.clip(lower=0).mean()).reset_index()
+    # the spreads behind the cost numbers, by size group over the test rows: Corwin-Schultz
+    # (raw, share floored, floored mean), the CRSP closing quoted spread and Abdi-Ranaldo
+    sp = P.assign(cs=P["spread_raw"].astype(float), quoted=P["quoted"].astype(float), ar=P["ar"].astype(float))
+    panel_sp = sp.groupby("size_grp").agg(
+        rows=("cs", "size"), cs_median=("cs", "median"), cs_share_negative=("cs", lambda v: (v < 0).mean()),
+        cs_mean_floored=("cs", lambda v: v.clip(lower=0).mean()),
+        quoted_coverage=("quoted", lambda v: v.notna().mean()), quoted_median=("quoted", "median"),
+        quoted_mean=("quoted", "mean"), ar_median=("ar", "median")).reset_index()
     panel_sp.to_csv(OUT / "stage1_spreads_panel.csv", index=False)
 
     dm = []
@@ -980,16 +1032,21 @@ def evaluate(args):
                     traded.append({"model": c.rsplit("_", 1)[0], "set": c.rsplit("_", 1)[1],
                                    "weighting": weighting, "universe": universe, "size_grp": sg,
                                    "traded_weight_share": v["traded"] / bs["traded"].sum(),
-                                   "full_spread_traded_weighted": 2 * v["cost"] / v["traded"] if v["traded"] > 0 else np.nan})
+                                   "quoted_share_of_traded": v["traded_quoted"] / v["traded"] if v["traded"] > 0 else np.nan,
+                                   "full_spread_used": 2 * v["cost"] / v["traded"] if v["traded"] > 0 else np.nan,
+                                   "full_spread_cs": 2 * v["cost_cs"] / v["traded"] if v["traded"] > 0 else np.nan})
                 key = f"{c}_{weighting}_{universe}"
                 monthly[key + "_gross"] = port["gross"]
                 monthly[key + "_net"] = port["net"]
                 monthly[key + "_turnover"] = port["turnover"]
                 row = {"model": c.rsplit("_", 1)[0], "set": c.rsplit("_", 1)[1],
                        "weighting": weighting, "universe": universe,
-                       "turnover_pm": port["turnover"].mean(), "cost_pm": 100 * port["cost"].mean()}
+                       "turnover_pm": port["turnover"].mean(), "cost_pm": 100 * port["cost"].mean(),
+                       "cost_cs_pm": 100 * port["cost_cs"].mean(),
+                       "quoted_share_of_traded": port["quoted_share"].mean()}
                 row.update({f"gross_{k}": v for k, v in summarise(port["gross"]).items()})
                 row.update({f"net_{k}": v for k, v in summarise(port["net"]).items()})
+                row.update({f"net_cs_{k}": v for k, v in summarise(port["net_cs"]).items()})
                 summary.append(row)
     pd.DataFrame(monthly).to_csv(OUT / "stage1_portfolios_monthly.csv")
     pd.DataFrame(summary).to_csv(OUT / "stage1_portfolio_summary.csv", index=False)
@@ -1008,13 +1065,14 @@ def evaluate(args):
     print("\nportfolios, value-weighted, all stocks, long-short:")
     s = pd.DataFrame(summary)
     s = s[(s["weighting"] == "vw") & (s["universe"] == "all")]
-    print(s[["model", "set", "gross_mean_pm", "gross_sharpe", "turnover_pm", "cost_pm", "net_sharpe"]]
-          .round(3).to_string(index=False))
-    print("\nCorwin-Schultz full spread over the test rows, by size group:")
+    print(s[["model", "set", "gross_mean_pm", "gross_sharpe", "turnover_pm", "cost_pm", "net_sharpe",
+             "cost_cs_pm", "net_cs_sharpe", "quoted_share_of_traded"]].round(3).to_string(index=False))
+    print("\nspreads over the test rows, by size group (full spreads; cs = Corwin-Schultz, quoted = CRSP closing quote):")
     print(panel_sp.round(4).to_string(index=False))
     print("\ntraded-weighted full spread inside the Huber VW long-short, by size group:")
     tw = traded[(traded["model"] == "huber") & (traded["set"] == "full") & (traded["weighting"] == "vw")]
-    print(tw[["universe", "size_grp", "traded_weight_share", "full_spread_traded_weighted"]].round(4).to_string(index=False))
+    print(tw[["universe", "size_grp", "traded_weight_share", "quoted_share_of_traded", "full_spread_used",
+              "full_spread_cs"]].round(4).to_string(index=False))
 
 
 # ---------------------------------------------------------------------------------
