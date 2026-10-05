@@ -43,8 +43,14 @@ month. Nothing is refit after validation: the model that is scored on the test y
 the one that was early-stopped or selected on the validation years (Gu, Kelly and Xiu 2020).
 
 Models: OLS with a Huber loss, elastic net, principal-component regression, partial least
-squares, gradient boosted trees, and feed-forward networks with one to three hidden layers
-(32, 16, 8 units), each an average over five seeds.
+squares, gradient boosted trees with squared loss (gbrt) and with a Huber loss (gbrth), and
+feed-forward networks with one to three hidden layers (32, 16, 8 units), each an average
+over five seeds.
+
+Beside the forecasts the run saves, per test year, the Huber regression's slope on each
+characteristic (stage1_huber_coef.csv) and each characteristic's own monthly Spearman
+correlation with the realised return over the test year (stage1_char_ic.csv); 08 puts both
+in event time next to the permutation importance.
 
 Two worker processes. LightGBM links Homebrew's libomp and torch ships its own OpenMP
 runtime; loaded into one process they deadlock on the first network. So the script runs
@@ -116,7 +122,7 @@ BATCH = 10000
 MAX_EPOCHS = 100
 PATIENCE = 5
 
-MODELS = ["huber", "enet", "pcr", "pls", "gbrt", "nn1", "nn2", "nn3"]
+MODELS = ["huber", "enet", "pcr", "pls", "gbrt", "gbrth", "nn1", "nn2", "nn3"]
 IMPORTANCE_MODELS = ["huber", "gbrt", "nn3"]
 ID_COLS = ["id", "eom", "permno", "prc", "size_grp", "me", "ret_exc_lead1m", "bidaskhl_21d", "source_crsp"]
 PANEL_VERSION = 3          # bump when the cached panel's columns change
@@ -437,7 +443,9 @@ def fit_huber(Xtr, ytr, Xva, yva, smoke=False):
         if best is None or v < best[0]:
             best = (v, q, beta)
     _, q, beta = best
-    return (lambda Z: (beta[0] + Z @ beta[1:]).astype(np.float32)), {"xi_quantile": q}
+    predict = lambda Z: (beta[0] + Z @ beta[1:]).astype(np.float32)
+    predict.beta = beta[1:]                 # one slope per characteristic, for the event-time study
+    return predict, {"xi_quantile": q}
 
 
 def fit_enet(Xtr, ytr, Xva, yva, smoke=False):
@@ -489,15 +497,21 @@ def fit_pls(Xtr, ytr, Xva, yva, smoke=False, max_rows=1_500_000):
     return (lambda Z: m.predict(Z).ravel().astype(np.float32)), {"K": K}
 
 
-def fit_gbrt(Xtr, ytr, Xva, yva, smoke=False, robust=False):
-    """Squared loss on the (clipped, under --robust) training target, like every model but
-    the Huber regression. The first robust pass gave the trees a Huber objective with a
-    threshold of 1.345 robust standard deviations; on a right-skewed return it fits a level
-    between the median and the mean, and the forecasts came out about 0.6% a month too low
-    (rank IC the highest of all models, R2 against zero -0.8%). The clipping is the
-    protection against the tails; the loss is squared error."""
+def fit_gbrt(Xtr, ytr, Xva, yva, smoke=False, huber_loss=False):
+    """Gradient boosted trees. gbrt minimises squared error on the (clipped, under --robust)
+    training target like every model but the Huber regression. gbrth minimises a Huber loss
+    with threshold 1.345 robust standard deviations of the training target (Gu, Kelly and
+    Xiu's GBRT+H). The two are kept side by side because the first robust pass showed them
+    to differ in kind: the Huber-loss trees had the highest rank IC of all models (0.104) and
+    an R2 against zero of -0.8%, their forecasts sitting about 0.6% a month below the
+    realised mean, since on a right-skewed return a Huber loss fits a level between the
+    median and the mean; the squared-loss trees centre correctly and rank less well."""
     best = None
     grid = [(2, 0.1)] if smoke else [(d, lr) for d in (2, 3) for lr in (0.05, 0.1)]
+    loss = {}
+    if huber_loss:
+        mad = float(np.median(np.abs(ytr - np.median(ytr)))) * 1.4826
+        loss = {"objective": "huber", "alpha": 1.345 * (mad or float(np.std(ytr)))}
     for depth, lr in grid:
         if HAVE_LGB:
             import lightgbm as lgb
@@ -505,7 +519,7 @@ def fit_gbrt(Xtr, ytr, Xva, yva, smoke=False, robust=False):
                                   n_estimators=50 if smoke else 1000, subsample=0.5,
                                   subsample_freq=1, colsample_bytree=0.5,
                                   min_child_samples=500, reg_lambda=1.0, verbose=-1,
-                                  random_state=0)
+                                  random_state=0, **loss)
             m.fit(Xtr, ytr, eval_set=[(Xva, yva)],
                   callbacks=[lgb.early_stopping(50, verbose=False)])
             n_best = int(m.best_iteration_ or m.n_estimators)
@@ -664,7 +678,9 @@ def fit_model(name, Xtr, ytr, Xva, yva, device, smoke, robust=False):
     if name == "pls":
         return fit_pls(Xtr, ytr, Xva, yva, smoke)
     if name == "gbrt":
-        return fit_gbrt(Xtr, ytr, Xva, yva, smoke, robust)
+        return fit_gbrt(Xtr, ytr, Xva, yva, smoke)
+    if name == "gbrth":
+        return fit_gbrt(Xtr, ytr, Xva, yva, smoke, huber_loss=True)
     if name in ("nn1", "nn2", "nn3"):
         if HAVE_TORCH:
             return fit_nn_torch(Xtr, ytr, Xva, yva, nn_layers(name), device, smoke)
@@ -698,7 +714,7 @@ def run(meta, X, cols, chars, args):
     pub = chars.set_index("characteristic")["pub_year"]
     col_idx = {c: i for i, c in enumerate(cols)}
     years = list(range(args.first_test, args.last_test + 1, args.every))
-    tuning, timing, imp_rows = [], [], []
+    tuning, timing, imp_rows, coef_rows, uic_rows = [], [], [], [], []
     valid = ~np.isnan(meta["y"].to_numpy())
     tag = "synthetic" if args.synthetic else "jkp"
 
@@ -768,6 +784,10 @@ def run(meta, X, cols, chars, args):
                 timing.append({"run_id": args.run_id, "year": y, "set": set_name, "model": name, "seconds": dt})
                 print(f"   {set_name:<6} {name:<6} {dt:6.0f}s  sd ratio {ratio:.3f}  offset {offset:+.3f}  {setting}",
                       flush=True)
+                if name == "huber" and hasattr(predict, "beta"):
+                    for c, b in zip(scols, predict.beta):
+                        coef_rows.append({"run_id": args.run_id, "year": y, "set": set_name,
+                                          "characteristic": c, "beta": float(b)})
                 if set_name == "full" and name in args.importance_models:
                     base = mse(y_te, p)
                     rng = np.random.default_rng(y)
@@ -776,6 +796,8 @@ def run(meta, X, cols, chars, args):
                         Zp[:, k] = rng.permutation(Zp[:, k])
                         imp_rows.append({"run_id": args.run_id, "year": y, "model": name, "characteristic": c,
                                          "mse_increase": mse(y_te, predict(Zp)) - base})
+            if set_name == "full" and "huber" in args.models:
+                uic_rows += univariate_ic(Xte, y_te, out["target_month"].to_numpy(), scols, y, args.run_id)
             del Xtr, Xva, Xte
         if existing is not None:
             keep = [c for c in existing.columns if c not in out.columns]
@@ -785,6 +807,35 @@ def run(meta, X, cols, chars, args):
         merge_csv(OUT / "stage1_timing.csv", pd.DataFrame(timing), ["year", "set", "model"])
         if imp_rows:
             merge_csv(OUT / "stage1_importance.csv", pd.DataFrame(imp_rows), ["year", "model"])
+        if coef_rows:
+            merge_csv(OUT / "stage1_huber_coef.csv", pd.DataFrame(coef_rows), ["year", "set"])
+        if uic_rows:
+            merge_csv(OUT / "stage1_char_ic.csv", pd.DataFrame(uic_rows), ["year"])
+
+
+def univariate_ic(Xte, y_te, months, cols, year, run_id):
+    """Each characteristic's own monthly Spearman correlation with the realised return over
+    the test year: the characteristic's out-of-sample strength, independent of any model.
+    Permutation importance in a linear model is about 2 beta Cov(y, x) on the test rows, so
+    this and the coefficient together say whether a change in importance comes from the
+    model leaning on the characteristic or from the characteristic still working."""
+    df = pd.DataFrame(Xte, columns=cols)
+    df["_y"] = y_te
+    df["_m"] = months
+    ics = []
+    for _, g in df.groupby("_m"):
+        r = g.drop(columns="_m").rank()
+        yr = r["_y"].to_numpy()
+        yr = (yr - yr.mean()) / (yr.std() or 1.0)
+        X = r[cols].to_numpy(float)
+        X = (X - X.mean(axis=0)) / np.where(X.std(axis=0) > 0, X.std(axis=0), np.nan)
+        ics.append(np.nanmean(X * yr[:, None], axis=0))
+    ics = np.vstack(ics)
+    mean, sd = np.nanmean(ics, axis=0), np.nanstd(ics, axis=0, ddof=1)
+    n = np.sum(~np.isnan(ics), axis=0)
+    return [{"run_id": run_id, "year": year, "characteristic": c, "ic_mean": float(mean[k]),
+             "ic_t": float(mean[k] / (sd[k] / np.sqrt(n[k]))) if sd[k] > 0 else np.nan, "months": int(n[k])}
+            for k, c in enumerate(cols)]
 
 
 def merge_csv(path, new, keys):
@@ -989,7 +1040,8 @@ def evaluate(args):
     P["year"] = P["target_month"].dt.year
     pred_cols = [c for c in P.columns if "_" in c and c.rsplit("_", 1)[0] in MODELS]
     run_years = sorted(P["year"].unique())
-    for name in ("stage1_tuning.csv", "stage1_timing.csv", "stage1_importance.csv"):
+    for name in ("stage1_tuning.csv", "stage1_timing.csv", "stage1_importance.csv",
+                 "stage1_huber_coef.csv", "stage1_char_ic.csv"):
         drop_other_runs(OUT / name, args.run_id, run_years)
 
     # R2 on four row sets: every row; without nano and micro caps; without the rows whose

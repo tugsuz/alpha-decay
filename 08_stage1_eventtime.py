@@ -8,6 +8,7 @@ Reads   output/stage1_importance.csv   (07_stage1_models.py) and jkp_characteris
         output/stage1_r2.csv and output/stage1_portfolio_summary.csv for the figures.
 Writes  output/stage1_eventtime.csv      the fixed-effects estimates
         output/fig07_eventtime.png        importance against years since publication
+        output/fig07_decomposition.png    Huber model: importance share, |slope|, the characteristic's own IC
         output/fig07_r2_by_year.png       public and full R2 by test year
 
 --------------------------------------------------------------------------------------
@@ -29,6 +30,13 @@ bins, the five years before publication being the reference.
 Importance is used two ways: in units of mean squared error (scaled by 1e4), and as a
 share of the year's total positive importance, which removes the level differences
 between years.
+
+Permutation importance in a linear model is about 2 beta Cov(y - rest, x) on the test rows:
+it rises when the model leans harder on the characteristic (beta) and when the
+characteristic still covaries with the return out of sample. The two are separated with
+the same design on two more outcomes, read from the csvs 07 writes beside the forecasts:
+the Huber regression's slope on each characteristic (log |beta|) and the characteristic's
+own monthly Spearman correlation with the realised return over the test year.
 
 A caveat that belongs with the table. Publication dates are staggered, so this is a
 two-way fixed effects event study, and when the effect differs across publication
@@ -145,11 +153,68 @@ def main():
             if g[bin_cols].sum().min() > 0:
                 r = two_way_fe(g, yvar, bin_cols); r["model"] = model; r["outcome"] = yvar; r["spec"] = "bins"
                 rows.append(r)
+    # the decomposition: the Huber slope on each characteristic (how much the model leans on
+    # it) and the characteristic's own monthly Spearman with the realised return (whether it
+    # still works), each in the same event-time design
+    extra = []
+    coef_file, uic_file = OUT / "stage1_huber_coef.csv", OUT / "stage1_char_ic.csv"
+    if coef_file.exists():
+        cf = pd.read_csv(coef_file)
+        cf = cf[(cf["run_id"] == run_id) & (cf["set"] == "full") & cf["year"].isin(imp["year"].unique())].copy()
+        cf["log_abs_beta"] = np.log(np.abs(cf["beta"]).clip(lower=1e-8))
+        cf["abs_beta_bp"] = np.abs(cf["beta"]) * 1e4
+        extra.append(("huber_beta", cf, ["log_abs_beta", "abs_beta_bp"]))
+    if uic_file.exists():
+        uf = pd.read_csv(uic_file)
+        uf = uf[(uf["run_id"] == run_id) & uf["year"].isin(imp["year"].unique())].copy()
+        uf["char_ic_x100"] = 100 * uf["ic_mean"]
+        uf["abs_char_ic_x100"] = 100 * uf["ic_mean"].abs()
+        extra.append(("char_ic", uf, ["char_ic_x100", "abs_char_ic_x100"]))
+    for label, df, yvars in extra:
+        df["pub_year"] = df["characteristic"].map(chars["pub_year"]).astype(int)
+        df["event_time"] = df["year"] - df["pub_year"]
+        df["post"] = (df["event_time"] >= 0).astype(float)
+        for lo, hi, name in BINS:
+            df[f"bin_{name}"] = ((df["event_time"] >= lo) & (df["event_time"] <= hi)).astype(float)
+        if df["post"].nunique() < 2:
+            continue
+        for yvar in yvars:
+            r = two_way_fe(df, yvar, ["post"]); r["model"] = label; r["outcome"] = yvar; r["spec"] = "post"
+            rows.append(r)
+            if df[bin_cols].sum().min() > 0:
+                r = two_way_fe(df, yvar, bin_cols); r["model"] = label; r["outcome"] = yvar; r["spec"] = "bins"
+                rows.append(r)
+
     if not rows:
         sys.exit("nothing to estimate")
     res = pd.concat(rows, ignore_index=True)
     res.to_csv(OUT / "stage1_eventtime.csv", index=False)
     print(res[["model", "outcome", "spec", "term", "coef", "se", "t", "n"]].round(4).to_string(index=False))
+
+    # figure: the decomposition for the Huber model, three panels of binned coefficients
+    panels = [("huber", "share", "importance share, pp"), ("huber_beta", "log_abs_beta", "log |slope|"),
+              ("char_ic", "char_ic_x100", "characteristic's own IC, x100")]
+    have = [(m, o, t) for m, o, t in panels if ((res["model"] == m) & (res["outcome"] == o) & (res["spec"] == "bins")).any()]
+    if len(have) > 1:
+        names = [n for _, _, n in BINS]
+        xpos = {n: i for i, n in enumerate(names)}
+        fig, axes = plt.subplots(1, len(have), figsize=(3.2 * len(have), 3.6), sharex=True)
+        for ax, (m, o, title) in zip(np.atleast_1d(axes), have):
+            g = res[(res["model"] == m) & (res["outcome"] == o) & (res["spec"] == "bins")].set_index("term")
+            xs = [xpos[REFERENCE]] + [xpos[t.replace("bin_", "")] for t in g.index]
+            ys = [0.0] + g["coef"].tolist()
+            es = [0.0] + (1.96 * g["se"]).tolist()
+            order = np.argsort(xs)
+            ax.errorbar(np.array(xs)[order], np.array(ys)[order], yerr=np.array(es)[order],
+                        marker="o", capsize=3, lw=1.3, color="#1f77b4")
+            ax.axhline(0, color="black", lw=0.8); ax.axvline(xpos["-5 to -1"] + 0.5, color="grey", lw=0.8, ls="--")
+            ax.set_xticks(range(len(names))); ax.set_xticklabels(names, fontsize=8)
+            ax.set_title(title, loc="left", fontsize=10); ax.spines[["top", "right"]].set_visible(False); ax.grid(alpha=0.25)
+        axes_list = np.atleast_1d(axes)
+        axes_list[0].set_ylabel("change against years -5 to -1")
+        fig.suptitle("Huber model: reliance on a characteristic, and the characteristic itself, around publication",
+                     x=0.01, ha="left", fontsize=10)
+        fig.tight_layout(); fig.savefig(OUT / "fig07_decomposition.png", dpi=160)
 
     # figure: binned event-time coefficients, share outcome, one line per model
     fig, ax = plt.subplots(figsize=(7, 4))
