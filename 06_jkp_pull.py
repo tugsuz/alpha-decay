@@ -4,15 +4,20 @@ WRDS (contrib.global_factor), one year at a time, and cache it.
 
     source ~/venvs/wrds/bin/activate
     cd ~/code/alpha-decay
-    python 06_jkp_pull.py --check     # columns, row counts, one month to csv; pulls nothing big
+    python 06_jkp_pull.py --check     # columns, row counts, a one-month profile; pulls nothing big
     python 06_jkp_pull.py             # every year not already cached, 1963 onward
 
 Writes:
     data/jkp_columns.txt                       every column the table has, with its type
-    data/jkp_sample_2010m01.csv                one month, for testing code without WRDS
+    data/jkp_profile_2010m01.csv               per-column summary of one month: dtype,
+                                               non-missing share, mean, sd, quantiles.
+                                               No stock-level rows; this file may leave
+                                               the machine and synthetic test data is
+                                               built from it
     data/jkp_us/jkp_us_<year>.parquet          one file per year, float32, restartable
 
-data/ is gitignored. Nothing downloaded here is redistributable.
+data/ is gitignored. Nothing downloaded here is redistributable, and the stock-level
+files never leave this machine; only aggregates (tables, figures) do.
 
 ==============================================================================================
 WHAT THIS TABLE IS, AND WHY THE QUERY LOOKS LIKE THIS
@@ -136,16 +141,39 @@ def check(db) -> None:
     last = db.raw_sql(f"SELECT max(eom) AS last FROM {TABLE} WHERE {SCREEN}")["last"].iloc[0]
     print(f"\n  last month in the US panel: {last}")
 
-    print("\nOne month to csv, for testing without WRDS ...")
+    print("\nProfiling one month (2010-01) column by column ...")
     q = f"""
         SELECT {", ".join(have)}
         FROM {TABLE}
         WHERE {SCREEN} AND eom = '2010-01-31'
     """
     df = db.raw_sql(q, date_cols=["eom"])
-    out = DATA / "jkp_sample_2010m01.csv"
-    df.to_csv(out, index=False)
-    print(f"  {len(df):,} rows x {df.shape[1]} columns -> {out.name}")
+    prof = profile(df)
+    out = DATA / "jkp_profile_2010m01.csv"
+    prof.to_csv(out)
+    print(f"  {len(df):,} stocks in the month, {len(prof)} columns profiled -> {out.name}")
+    print("  (the profile holds no stock-level values and is safe to share)")
+
+
+def profile(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per column: dtype, non-missing share, mean, sd and five quantiles."""
+    rows = {}
+    n = len(df)
+    for c in df.columns:
+        s = df[c]
+        row = {"dtype": str(s.dtype), "non_missing": float(s.notna().mean()), "n": n}
+        if c in ("id", "permno", "gvkey", "eom"):
+            row["distinct"] = int(s.nunique())
+        elif c == "size_grp":
+            for k, v in s.value_counts(normalize=True).items():
+                row[f"share_{k}"] = float(v)
+        else:
+            x = pd.to_numeric(s, errors="coerce").astype(float)
+            row.update({"mean": x.mean(), "sd": x.std(),
+                        "q01": x.quantile(0.01), "q25": x.quantile(0.25), "q50": x.quantile(0.5),
+                        "q75": x.quantile(0.75), "q99": x.quantile(0.99)})
+        rows[c] = row
+    return pd.DataFrame(rows).T.rename_axis("column")
 
 
 def pull_year(db, year: int, cols: list[str]) -> None:
@@ -176,7 +204,7 @@ def pull_year(db, year: int, cols: list[str]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--check", action="store_true", help="columns, counts and one sample month")
+    ap.add_argument("--check", action="store_true", help="columns, counts and a one-month profile")
     ap.add_argument("--first", type=int, default=FIRST_YEAR)
     ap.add_argument("--last", type=int, default=LAST_YEAR)
     args = ap.parse_args()
