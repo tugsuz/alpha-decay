@@ -1,0 +1,154 @@
+characteristic,name,group,cite,pub_year,sample_start,sample_end,significance,date_source
+niq_su,Standardized earnings surprise,Momentum,Foster Olsen and Shevlin (1984),1984,1974,1981,1,paper
+ret_6_1,Price momentum t-6 to t-1,Momentum,Jegadeesh and Titman (1993),1993,1965,1989,1,paper
+ret_12_1,Price momentum t-12 to t-1,Momentum,Jegadeesh and Titman (1993),1993,1965,1989,1,paper
+saleq_su,Standardized Revenue surprise,Momentum,Jegadeesh and Livnat (2006),2006,1987,2003,1,paper
+tax_gr1a,Tax expense surprise,Momentum,Thomas and Zhang (2011),2011,1977,2006,1,paper
+ni_inc8q,Number of consecutive quarters with earnings increases,Momentum,Barth Elliott and Finn (1999),1999,1982,1992,0,paper
+prc_highprc_252d,Current price to high price over last year,Momentum,George and Hwang (2004),2004,1963,2001,1,paper
+resff3_6_1,Residual momentum t-6 to t-1,Momentum,Blitz Huij and Martens (2011),2011,1930,2009,1,paper
+resff3_12_1,Residual momentum t-12 to t-1,Momentum,Blitz Huij and Martens (2011),2011,1930,2009,1,paper
+be_me,Book-to-market equity,VALUE,Rosenberg Reid and Lanstein (1985),1985,1973,1984,1,paper
+debt_me,Debt-to-market,VALUE,Bhandari (1988),1988,1948,1979,1,paper
+at_me,Assets-to-market,VALUE,Fama and French (1992),1992,1963,1990,0,paper
+ret_60_12,Long-term reversal,VALUE,De Bondt and Thaler (1985),1985,1926,1982,1,paper
+ni_me,Earnings-to-price,VALUE,Basu (1983),1983,1963,1979,1,paper
+fcf_me,Free cash flow-to-price,VALUE,Lakonishok Shleifer and Vishny (1994),1994,1963,1990,1,paper
+div12m_me,Dividend yield,VALUE,Litzenberger and Ramaswamy (1979),1979,1940,1980,1,paper
+eqpo_me,Payout yield,VALUE,Boudoukh et al. (2007),2007,1984,2003,1,paper
+eqnpo_me,Net payout yield,VALUE,Boudoukh et al. (2007),2007,1984,2003,1,paper
+sale_gr3,Sales Growth (3 years),VALUE,Lakonishok Shleifer and Vishny (1994),1994,1968,1989,1,paper
+sale_gr1,Sales Growth (1 year),VALUE,Lakonishok Shleifer and Vishny (1994),1994,1968,1989,1,paper
+ebitda_mev,Ebitda-to-market enterprise value,VALUE,Loughran and Wellman (2011),2011,1963,2009,1,paper
+sale_me,Sales-to-market,VALUE,Barbee Mukherji and Raines (1996),1996,1979,1991,1,paper
+ocf_me,Operating cash flow-to-market,VALUE,Desai Rajgopal and Venkatachalam (2004),2004,1973,1997,1,paper
+ival_me,Intrinsic value-to-market,VALUE,Frankel and Lee (1998),1998,1975,1993,0,paper
+bev_mev,Book-to-market enterprise value,VALUE,Penman Richardson and Tuna (2007),2007,1962,2001,1,paper
+netdebt_me,Net debt-to-price,VALUE,Penman Richardson and Tuna (2007),2007,1962,2001,1,paper
+eq_dur,Equity duration,VALUE,Dechow Sloan and Soliman (2004),2004,1962,1998,1,paper
+capex_abn,Abnormal corporate investment,INVESTMENT,Titman Wei and Xie (2004),2004,1973,1996,1,paper
+at_gr1,Asset Growth,INVESTMENT,Cooper Gulen and Schill (2008),2008,1968,2003,1,paper
+ppeinv_gr1a,Change PPE and Inventory,INVESTMENT,Lyandres Sun and Zhang (2008),2008,1970,2005,1,paper
+noa_at,Net operating assets,INVESTMENT,Hirshleifer et al. (2004),2004,1964,2002,1,paper
+noa_gr1a,Change in net operating assets,INVESTMENT,Hirshleifer et al. (2004),2004,1964,2002,1,paper
+lnoa_gr1a,Change in long-term net operating assets,INVESTMENT,Fairfield Whisenant and Yohn (2003),2003,1964,1993,1,paper
+capx_gr1,CAPEX growth (1 year),INVESTMENT,Xie (2001),2001,1971,1992,0,paper
+capx_gr2,CAPEX growth (2 years),INVESTMENT,Anderson and Garcia-Feijoo (2006),2006,1976,1998,1,paper
+capx_gr3,CAPEX growth (3 years),INVESTMENT,Anderson and Garcia-Feijoo (2006),2006,1976,1998,1,paper
+chcsho_12m,Net stock issues,INVESTMENT,Pontiff and Woodgate (2008),2008,1970,2003,1,paper
+eqnpo_12m,Equity net payout,INVESTMENT,Daniel and Titman (2006),2006,1968,2003,1,paper
+debt_gr3,Growth in book debt (3 years),INVESTMENT,Lyandres Sun and Zhang (2008),2008,1970,2005,1,paper
+inv_gr1,Inventory growth,INVESTMENT,Belo and Lin (2011),2011,1965,2009,1,paper
+inv_gr1a,Inventory change,INVESTMENT,Thomas and Zhang (2002),2002,1970,1997,1,paper
+oaccruals_at,Operating accruals,INVESTMENT,Sloan (1996),1996,1962,1991,1,paper
+taccruals_at,Total accruals,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+cowc_gr1a,Change in current operating working capital,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+coa_gr1a,Change in current operating assets,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+col_gr1a,Change in current operating liabilities,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+nncoa_gr1a,Change in net noncurrent operating assets,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+ncoa_gr1a,Change in noncurrent operating assets,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+ncol_gr1a,Change in noncurrent operating liabilities,INVESTMENT,Richardson et al. (2005),2005,1962,2001,0,paper
+nfna_gr1a,Change in net financial assets,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+sti_gr1a,Change in short-term investments,INVESTMENT,Richardson et al. (2005),2005,1962,2001,0,paper
+lti_gr1a,Change in long-term investments,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+fnl_gr1a,Change in financial liabilities,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+be_gr1a,Change in common equity,INVESTMENT,Richardson et al. (2005),2005,1962,2001,1,paper
+oaccruals_ni,Percent operating accruals,INVESTMENT,Hafzalla Lundholm and Van Winkle (2011),2011,1989,2008,1,paper
+taccruals_ni,Percent total accruals,INVESTMENT,Hafzalla Lundholm and Van Winkle (2011),2011,1989,2008,1,paper
+netis_at,Net total issuance,INVESTMENT,Bradshaw Richardson and Sloan (2006),2006,1971,2000,1,paper
+eqnetis_at,Net equity issuance,INVESTMENT,Bradshaw Richardson and Sloan (2006),2006,1971,2000,1,paper
+dbnetis_at,Net debt issuance,INVESTMENT,Bradshaw Richardson and Sloan (2006),2006,1971,2000,1,paper
+niq_be,Quarterly return on equity,Profitability,Hou Xue and Zhang (2015),2015,1972,2012,1,paper
+niq_be_chg1,Change in quarterly return on equity,Profitability,Hou Xue and Zhang (2015),2015,1972,2012,0,variant of niq_be
+niq_at,Quarterly return on assets,Profitability,Balakrishnan Bartov and Faurel (2010),2010,1976,2005,1,paper
+niq_at_chg1,Change in quarterly return on assets,Profitability,Balakrishnan Bartov and Faurel (2010),2010,1976,2005,0,variant of niq_at
+ebit_bev,Return on net operating assets,Profitability,Soliman (2008),2008,1984,2002,1,paper
+ebit_sale,Profit margin,Profitability,Soliman (2008),2008,1984,2002,1,paper
+sale_bev,Asset turnover,Profitability,Soliman (2008),2008,1984,2002,1,paper
+at_turnover,Capital turnover,Profitability,Haugen and Baker (1996),1996,1979,1993,0,paper
+gp_at,Gross profits-to-assets,Profitability,Novy-Marx (2013),2013,1963,2010,1,paper
+gp_atl1,Gross profits-to-lagged assets,Profitability,Novy-Marx (2013),2013,1963,2010,0,variant of gp_at
+ope_be,Operating profits-to-book equity,Profitability,Fama and French (2015),2015,1963,2013,1,paper
+ope_bel1,Operating profits-to-lagged book equity,Profitability,Fama and French (2015),2015,1963,2013,0,variant of ope_be
+op_at,Operating profits-to-book assets,Profitability,Ball et al. (2016),2016,1963,2014,1,variant of op_atl1
+op_atl1,Operating profits-to-lagged book assets,Profitability,Ball et al. (2016),2016,1963,2014,1,paper
+cop_at,Cash-based operating profits-to-book assets,Profitability,Ball et al. (2016),2016,1963,2014,0,variant of cop_atl1
+cop_atl1,Cash-based operating profits-to-lagged book assets,Profitability,Ball et al. (2016),2016,1963,2014,1,paper
+f_score,Pitroski F-score,Profitability,Piotroski (2000),2000,1976,1996,1,paper
+o_score,Ohlson O-score,Profitability,Dichev (1998),1998,1981,1995,1,paper
+z_score,Altman Z-score,Profitability,Dichev (1998),1998,1981,1995,1,paper
+pi_nix,Taxable income-to-book income,Profitability,Lev and Nissim (2004),2004,1973,2000,1,paper
+at_be,Book leverage,Profitability,Fama and French (1992),1992,1963,1990,0,paper
+saleq_gr1,Sales growth (1 quarter),Profitability,Lakonishok Shleifer and Vishny (1994),1994,1968,1989,0,variant of sale_gr1
+rd_me,R&D-to-market,INTANGIBLES,Chan Lakonishok and Sougiannis (2001),2001,1975,1995,1,paper
+rd_sale,R&D-to-sales,INTANGIBLES,Chan Lakonishok and Sougiannis (2001),2001,1975,1995,0,paper
+opex_at,Operating leverage,INTANGIBLES,Novy-Marx (2011),2011,1963,2008,1,paper
+emp_gr1,Hiring rate,INTANGIBLES,Belo Lin and Bazdresch (2014),2014,1965,2010,1,paper
+rd5_at,R&D capital-to-book assets,INTANGIBLES,Li (2011),2011,1952,2004,0,paper
+age,Firm age,INTANGIBLES,Jiang Lee and Zhang (2005),2005,1965,2001,1,paper
+dsale_dinv,Change sales minus change Inventory,INTANGIBLES,Abarbanell and Bushee (1998),1998,1974,1988,1,paper
+dsale_drec,Change sales minus change receivables,INTANGIBLES,Abarbanell and Bushee (1998),1998,1974,1988,0,paper
+dgp_dsale,Change gross margin minus change sales,INTANGIBLES,Abarbanell and Bushee (1998),1998,1974,1988,0,paper
+dsale_dsga,Change sales minus change SG&A,INTANGIBLES,Abarbanell and Bushee (1998),1998,1974,1988,0,paper
+sale_emp_gr1,Labor force efficiency,INTANGIBLES,Abarbanell and Bushee (1998),1998,1974,1988,0,paper
+tangibility,Asset tangibility,INTANGIBLES,Hahn and Lee (2009),2009,1973,2001,0,paper
+kz_index,Kaplan-Zingales index,INTANGIBLES,Lamont Polk and Saa-Requejo (2001),2001,1968,1995,1,paper
+ocfq_saleq_std,Cash flow volatility,INTANGIBLES,Huang (2009),2009,1980,2004,1,paper
+cash_at,Cash-to-assets,INTANGIBLES,Palazzo (2012),2012,1972,2009,0,paper
+ni_ar1,Earnings persistence,INTANGIBLES,Francis et al. (2004),2004,1975,2001,0,paper
+ni_ivol,Earnings volatility,INTANGIBLES,Francis et al. (2004),2004,1975,2001,0,paper
+earnings_variability,Earnings variability,INTANGIBLES,Francis et al. (2004),2004,1975,2001,0,paper
+aliq_at,Liquidity of book assets,INTANGIBLES,Ortiz-Molina and Phillips (2014),2014,1984,2006,0,paper
+aliq_mat,Liquidity of market assets,INTANGIBLES,Ortiz-Molina and Phillips (2014),2014,1984,2006,0,paper
+seas_1_1an,"Year 1-lagged return, annual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,1,paper
+seas_1_1na,"Year 1-lagged return, nonannual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,1,paper
+seas_2_5an,"Years 2-5 lagged returns, annual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,1,paper
+seas_2_5na,"Years 2-5 lagged returns, nonannual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,1,paper
+seas_6_10an,"Years 6-10 lagged returns, annual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,1,paper
+seas_6_10na,"Years 6-10 lagged returns, nonannual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,1,paper
+seas_11_15an,"Years 11-15 lagged returns, annual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,1,paper
+seas_11_15na,"Years 11-15 lagged returns, nonannual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,0,paper
+seas_16_20an,"Years 16-20 lagged returns, annual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,1,paper
+seas_16_20na,"Years 16-20 lagged returns, nonannual",INTANGIBLES,Heston and Sadka (2008),2008,1965,2002,1,paper
+market_equity,Market Equity,TRADING FRICTIONS,Banz (1981),1981,1926,1975,1,paper
+ivol_ff3_21d,Idiosyncratic volatility from the Fama-French 3-factor model,TRADING FRICTIONS,Ang et al. (2006),2006,1963,2000,1,paper
+ivol_capm_252d,Idiosyncratic volatility from the CAPM (252 days),TRADING FRICTIONS,Ali Hwang and Trombley (2003),2003,1976,1997,1,paper
+ivol_capm_21d,Idiosyncratic volatility from the CAPM (21 days),TRADING FRICTIONS,Ang et al. (2006),2006,1963,2000,0,variant of ivol_ff3_21d
+ivol_hxz4_21d,Idiosyncratic volatility from the q-factor model,TRADING FRICTIONS,Ang et al. (2006),2006,1963,2000,0,variant of ivol_ff3_21d
+rvol_21d,Return volatility,TRADING FRICTIONS,Ang et al. (2006),2006,1963,2000,1,paper
+beta_60m,Market Beta,TRADING FRICTIONS,Fama and MacBeth (1973),1973,1935,1968,1,paper
+betabab_1260d,Frazzini-Pedersen market beta,TRADING FRICTIONS,Frazzini and Pedersen (2014),2014,1926,2012,1,paper
+beta_dimson_21d,Dimson beta,TRADING FRICTIONS,Dimson (1979),1979,1955,1974,0,paper
+turnover_126d,Share turnover,TRADING FRICTIONS,Datar Naik and Radcliffe (1998),1998,1963,1991,1,paper
+turnover_var_126d,Coefficient of variation for share turnover,TRADING FRICTIONS,Chordia Subrahmanyam and Anshuman (2001),2001,1966,1995,1,paper
+dolvol_126d,Dollar trading volume,TRADING FRICTIONS,Brennan Chordia and Subrahmanyam (1998),1998,1966,1995,1,paper
+dolvol_var_126d,Coefficient of variation for dollar trading volume,TRADING FRICTIONS,Chordia Subrahmanyam and Anshuman (2001),2001,1966,1995,1,paper
+prc,Price per share,TRADING FRICTIONS,Miller and Scholes (1982),1982,1940,1978,1,paper
+ami_126d,Amihud Measure,TRADING FRICTIONS,Amihud (2002),2002,1964,1997,1,paper
+zero_trades_21d,Number of zero trades with turnover as tiebreaker (1 month),TRADING FRICTIONS,Liu (2006),2006,1963,2003,0,paper
+zero_trades_126d,Number of zero trades with turnover as tiebreaker (6 months),TRADING FRICTIONS,Liu (2006),2006,1963,2003,1,paper
+zero_trades_252d,Number of zero trades with turnover as tiebreaker (12 months),TRADING FRICTIONS,Liu (2006),2006,1963,2003,1,paper
+rmax1_21d,Maximum daily return,TRADING FRICTIONS,Bali Cakici and Whitelaw (2011),2011,1962,2005,1,paper
+rskew_21d,Total skewness,TRADING FRICTIONS,Bali Engle and Murray (2016),2016,1925,2012,1,paper
+iskew_capm_21d,Idiosyncratic skewness from the CAPM,TRADING FRICTIONS,Bali Engle and Murray (2016),2016,1925,2012,0,variant of iskew_ff3_21d
+iskew_ff3_21d,Idiosyncratic skewness from the Fama-French 3-factor model,TRADING FRICTIONS,Bali Engle and Murray (2016),2016,1925,2012,1,paper
+iskew_hxz4_21d,Idiosyncratic skewness from the q-factor model,TRADING FRICTIONS,Bali Engle and Murray (2016),2016,1925,2012,0,variant of iskew_ff3_21d
+coskew_21d,Coskewness,TRADING FRICTIONS,Harvey and Siddique (2000),2000,1963,1993,1,paper
+ret_1_0,Short-term reversal,TRADING FRICTIONS,Jegadeesh (1990),1990,1929,1982,1,paper
+betadown_252d,Downside beta,TRADING FRICTIONS,Ang Chen and Xing (2006),2006,1963,2001,1,paper
+bidaskhl_21d,The high-low bid-ask spread,TRADING FRICTIONS,Corwin and Schultz (2012),2012,1927,2006,1,paper
+ret_3_1,Price momentum t-3 to t-1,NEW,Jegedeesh and Titman (1993),1993,1965,1989,1,paper
+ret_9_1,Price momentum t-9 to t-1,NEW,Jegedeesh and Titman (1993),1993,1965,1989,1,paper
+ret_12_7,Price momentum t-12 to t-7,NEW,Novy-Marx (2012),2012,1925,2010,1,paper
+corr_1260d,Market correlation,NEW,"Assness, Frazzini, Gormsen, Pedersen (2020)",2020,1925,2015,1,paper
+rmax5_21d,Highest 5 days of return,NEW,"Bali, Brown, Murray and Tang (2017)",2017,1993,2012,1,paper
+rmax5_rvol_21d,Highest 5 days of return scaled by volatility,NEW,"Assness, Frazzini, Gormsen, Pedersen (2020)",2020,1925,2015,1,paper
+ni_be,Return on equity,NEW,Haugen and Baker (1996),1996,1979,1993,1,paper
+ocf_at,Operating cash flow to assets,NEW,"Bouchard, Krüger, Landier and Thesmar (2019)",2019,1990,2015,1,paper
+ocf_at_chg1,Change in operating cash flow to assets,NEW,"Bouchard, Krüger, Landier and Thesmar (2019)",2019,1990,2015,1,paper
+mispricing_perf,Mispricing factor: Performance,NEW,Stambaugh and Yuan (2016),2016,1967,2013,1,paper
+mispricing_mgmt,Mispricing factor: Management,NEW,Stambaugh and Yuan (2016),2016,1967,2013,1,paper
+qmj,Quality minus Junk: Composite,NEW,"Assness, Frazzini and Pedersen (2018)",2018,1957,2016,1,paper
+qmj_prof,Quality minus Junk: Profitability,NEW,"Assness, Frazzini and Pedersen (2018)",2018,1957,2016,1,paper
+qmj_growth,Quality minus Junk: Growth,NEW,"Assness, Frazzini and Pedersen (2018)",2018,1957,2016,1,paper
+qmj_safety,Quality minus Junk: Safety,NEW,"Assness, Frazzini and Pedersen (2018)",2018,1957,2016,1,paper
