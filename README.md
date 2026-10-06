@@ -22,8 +22,14 @@ universe twice the size and a decade more data.
 date-clustered standard errors gives a post-publication coefficient of -0.272%/month
 (t = -5.1) and a post-sample coefficient of -0.145 (t = -1.9). The difference between
 them, which is the part of the decline that arrives with publication itself, is
--0.127 with t = -1.7. The three-window design does not separate the arbitrage channel
-from the selection channel in this universe, and the paper says so.
+-0.127 with t = -1.7. A Sun-Abraham event study, which compares each signal only with
+signals not yet published in the same month, puts the post-publication change against
+the five years before publication at +0.05%/month (t = 0.4), with the last decade of
+data dropping out because the universe has no never-published signal to serve as a
+control. The design does not separate the arbitrage channel from the selection channel
+in this universe, and the paper says so.
+
+![event time around publication](output/fig02_sunabraham.png)
 
 **Validation.** Two signals were rebuilt from security-level CRSP data and scored month by
 month against the published series. Size reproduces to within 0.002%/month (correlation
@@ -62,10 +68,12 @@ Costs are half the CRSP closing quoted spread, which exists for 99 percent of te
 stock-months; Corwin-Schultz fills the rest and is reported as a bound, since its mega-cap
 median is ten times the quoted one. The equal-weighted books earn gross Sharpe ratios of
 up to 3.4 by putting most of their trading in micro and nano caps, and net 0.1 to 0.8. In
-event time around each characteristic's publication, no model leans less on a
-characteristic after its paper appears; two of ten post coefficients clear |t| = 2, both
-for the linear model's importance, with a pre-trend in the same direction, so that result
-is a first pass until the Sun-Abraham version is run. Two design decisions (dropping rows
+event time around each characteristic's publication, the first-pass regression put two of
+ten post coefficients above |t| = 2, both for the linear model's importance; with the
+Sun-Abraham estimator none of ten does, and the first-pass numbers turn out to rest on
+the characteristics that were already public in 1995 and on the test years after 2015,
+comparisons a cohort-robust estimator cannot make. A model refit each year does not
+detectably change how much it leans on a characteristic when its paper appears. Two design decisions (dropping rows
 without a CRSP return, and the cost series) were made from diagnostics before any model
 was scored, and the paper says so.
 
@@ -94,7 +102,7 @@ and `mthcap` should be used in place of `abs(prc) * shrout`.
 ## Running it
 
 ```bash
-python 02_decay_panel.py        # three-window decay, panel regression; about a second
+python 02_decay_panel.py        # three-window decay, panel regression, Sun-Abraham event study; under a minute
 python 05_ml_panel.py           # the forecasting section; about ten minutes
 python 05_ml_panel.py figures   # redraw its figures from the saved outputs
 
@@ -135,7 +143,9 @@ Signals the original authors classify as placebos are excluded; a signal must ha
 least 24 monthly observations in every window; returns are equal-weighted across signals;
 the event date is the publication year in `SignalDoc.csv`, which makes the estimated
 post-publication decline a lower bound if traders act on working papers. The
-cluster-robust covariance is written out in numpy. In the forecasting section a signal
+cluster-robust covariance is written out in numpy, and so are the two-way clustered
+covariance and the Sun-Abraham estimator in `event_study.py`, which both the decay script
+and the stock-level event-time script import. In the forecasting section a signal
 enters only in years after its publication year, hyperparameters are chosen on the last
 eight years of each training sample, and every setting tried is in
 `output/ml_tuning.csv`. In the stock-level section the fitting target is clipped at the
