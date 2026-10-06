@@ -117,10 +117,11 @@ selection. We then move the same question to individual stocks, with 153 publish
 characteristics as features, and fit every model twice: once on the characteristics that
 were public in each test year and once on all of them. The second set, which is the usual
 one and contains look-ahead, is ahead of the first in every model, every row set and every
-portfolio, by a few tenths of a point of out-of-sample R² and a visible share of each
-book's Sharpe ratio. A model refit each year does not lean less on a characteristic after
-its paper appears; the linear model leans more, while the characteristic's own
-correlation with returns does not change.
+portfolio, by a few tenths of a point of out-of-sample R², and for the linear models the
+gap in net Sharpe ratio, about a third of a unit, survives a Ledoit-Wolf test in every
+book. In event time around each characteristic's publication the model does not lean
+less on it afterwards; the one estimate that clears conventional significance, for the
+linear model, comes with a pre-trend, so it is reported as a first pass.
 :::
 
 @sec-data describes the data, @sec-design the design and the estimator, @sec-result1
@@ -1353,6 +1354,40 @@ def f2(x):
 
 cs_vw = s1_tr[(s1_tr["model"] == "huber") & (s1_tr["set"] == "full") & (s1_tr["weighting"] == "vw")
               & (s1_tr["universe"] == "all")].set_index("size_grp")
+quoted_cov_all = (s1_sp["quoted_coverage"] * s1_sp["rows"]).sum() / s1_sp["rows"].sum()
+s1_month = pd.read_csv(OUT / "stage1_portfolios_monthly.csv", index_col=0)
+
+def nw_var_s1(d, lags=12):
+    d = d - d.mean(); T = len(d); v = (d @ d) / T
+    for l in range(1, lags + 1):
+        v += 2 * (1 - l / (lags + 1)) * (d[l:] @ d[:-l]) / T
+    return v / T
+
+def lw_sharpe_diff(r1, r2, lags=12):
+    """Ledoit and Wolf (2008): the difference of two Sharpe ratios by the delta method on
+    (mean1, mean2, second moment1, second moment2) with a Newey-West covariance. Returns
+    the annualised difference and its t-statistic."""
+    m1, m2 = r1.mean(), r2.mean(); g1, g2 = (r1 ** 2).mean(), (r2 ** 2).mean(); T = len(r1)
+    Y = np.column_stack([r1 - m1, r2 - m2, r1 ** 2 - g1, r2 ** 2 - g2])
+    Psi = (Y.T @ Y) / T
+    for l in range(1, lags + 1):
+        G = (Y[l:].T @ Y[:-l]) / T
+        Psi += (1 - l / (lags + 1)) * (G + G.T)
+    s1, s2 = (g1 - m1 ** 2) ** 1.5, (g2 - m2 ** 2) ** 1.5
+    grad = np.array([g1 / s1, -g2 / s2, -m1 / (2 * s1), m2 / (2 * s2)])
+    diff = m1 / np.sqrt(g1 - m1 ** 2) - m2 / np.sqrt(g2 - m2 ** 2)
+    return diff * np.sqrt(12), diff / np.sqrt(grad @ Psi @ grad / T)
+
+def full_minus_public(m, w, u):
+    f = s1_month[f"{m}_full_{w}_{u}_gross"].to_numpy(); p = s1_month[f"{m}_public_{w}_{u}_gross"].to_numpy()
+    fn = s1_month[f"{m}_full_{w}_{u}_net"].to_numpy(); pn = s1_month[f"{m}_public_{w}_{u}_net"].to_numpy()
+    d = f - p
+    ds, t = lw_sharpe_diff(fn, pn)
+    return {"dmean": 100 * d.mean(), "t_nw": d.mean() / np.sqrt(nw_var_s1(d)), "dsr": ds, "t_lw": t}
+
+BOOKS = [("vw", "all", "VW, all"), ("vw", "ex_small", "VW, ex micro and nano"),
+         ("ew", "all", "EW, all"), ("ew", "ex_small", "EW, ex micro and nano")]
+FP = {(m, w, u): full_minus_public(m, w, u) for m in S1_MODELS for w, u, _ in BOOKS}
 ew_small_share = s1_tr[(s1_tr["set"] == "full") & (s1_tr["weighting"] == "ew") & (s1_tr["universe"] == "all")
                        & s1_tr["size_grp"].isin(["micro", "nano"])].groupby("model")["traded_weight_share"].sum()
 quoted_share = s1_port["quoted_share_of_traded"].min()
@@ -1367,28 +1402,35 @@ The second decision is which spread. The first pass charged half of the
 @corwin2012 estimate that comes with the panel, averaged over 21 days. The traded-weighted
 spread it implied in a value-weighted book was about one percent, which is too high
 after 2001 for stocks above the NYSE 20th size percentile, and the estimate is noisy and
-floored at zero, which pushes its mean up. So the costs here use the month's mean closing
-quoted spread from the CRSP daily file, $(\text{ask} - \text{bid}) / \text{midpoint}$ on
-days with a positive quote, which @chung2014 show tracks TAQ effective spreads closely;
-for liquid stocks it is an upper bound, since trades print inside the quote. The
-Corwin-Schultz estimate is the fallback where no quote exists, and the @abdi2017
-estimate from daily high, low and close is a third reading that needs no quotes. The
-quoted spread prices at least `{python} f"{100*quoted_share:.0f}"` percent of traded
-weight in every book, and both cost series are reported.
+floored at zero, which pushes its mean up. The cost measure in this section is therefore
+the month's mean closing quoted spread from the CRSP daily file,
+$(\text{ask} - \text{bid}) / \text{midpoint}$ on days with a positive quote, which
+@chung2014 show tracks TAQ effective spreads closely; for liquid stocks it is itself an
+upper bound, since trades print inside the quote. A quoted spread exists for
+`{python} f"{100*quoted_cov_all:.1f}"` percent of the test stock-months (between
+`{python} f"{100*s1_sp['quoted_coverage'].min():.1f}"` and
+`{python} f"{100*s1_sp['quoted_coverage'].max():.1f}"` percent across the size groups) and
+prices at least `{python} f"{100*quoted_share:.0f}"` percent of traded weight in every
+book; the Corwin-Schultz estimate fills the gap. Corwin-Schultz is also reported as a
+bound: for every size group outside nano it is above the quoted spread, by a factor of
+about ten at the mega-cap median, so the net Sharpe ratio under it is a conservative
+reading for a value-weighted book. In the nano group it is below the quoted spread, so
+it is not a bound there. The @abdi2017 estimate from daily high, low and close is a
+third reading that needs no quotes.
 
 ```{python}
 #| label: tbl-s1-spreads
-#| tbl-cap: "Full spreads over the test rows, by size group, in percent. Medians of the Corwin-Schultz estimate, the CRSP closing quoted spread and the Abdi-Ranaldo estimate; then, for the value-weighted Huber book on all rows, each group's share of traded weight and the traded-weighted spread on the two cost series."
+#| tbl-cap: "Full spreads over the test rows, by size group, in percent. Medians of the CRSP closing quoted spread (the cost measure), the Corwin-Schultz estimate (the bound) and the Abdi-Ranaldo estimate; then, for the value-weighted Huber book on all rows, each group's share of traded weight and the traded-weighted spread on the two series."
 #| echo: false
 
 rows = []
 for g in SIZE_ORDER:
     r = s1_sp.loc[g]
     t = cs_vw.loc[g]
-    rows.append(f"| {g} | {100*r['cs_median']:.2f} | {100*r['quoted_median']:.2f} | {100*r['ar_median']:.2f} | "
+    rows.append(f"| {g} | {100*r['quoted_median']:.2f} | {100*r['cs_median']:.2f} | {100*r['ar_median']:.2f} | "
                 f"{100*t['traded_weight_share']:.1f} | {100*t['full_spread_used']:.2f} | {100*t['full_spread_cs']:.2f} |")
-Markdown("| Size group | Corwin-Schultz, median | quoted, median | Abdi-Ranaldo, median | "
-         "share of traded weight | traded-weighted spread, used | traded-weighted spread, Corwin-Schultz |\n"
+Markdown("| Size group | quoted, median | Corwin-Schultz, median | Abdi-Ranaldo, median | "
+         "share of traded weight | traded-weighted spread, quoted | traded-weighted spread, Corwin-Schultz |\n"
          "|--------|------:|------:|------:|------:|------:|------:|\n" + "\n".join(rows))
 ```
 
@@ -1399,16 +1441,16 @@ medians of `{python} f"{100*s1_sp.loc['mega','cs_median']:.2f}"` and
 `{python} f"{100*s1_sp.loc['large','cs_median']:.2f}"`; the two agree in the micro group
 and reverse in the nano group, where the quoted spread is wider. A value-weighted book
 puts `{python} f"{100*cs_vw.loc['mega','traded_weight_share']:.0f}"` percent of its
-trading in mega caps, so the series used charges it
-`{python} f"{100*cs_vw.loc['mega','full_spread_used']:.2f}"` percent there against
-`{python} f"{100*cs_vw.loc['mega','full_spread_cs']:.2f}"` on Corwin-Schultz. The
+trading in mega caps, where the quoted spread charges it
+`{python} f"{100*cs_vw.loc['mega','full_spread_used']:.2f}"` percent and Corwin-Schultz
+would charge `{python} f"{100*cs_vw.loc['mega','full_spread_cs']:.2f}"`. The
 traded-weighted spreads sit above the panel medians within every group, as they should
 when the extreme deciles hold the less liquid stocks of each group and the spread
 distribution is skewed.
 
 ```{python}
 #| label: tbl-s1-port
-#| tbl-cap: "Decile long-short portfolios, value-weighted, test years pooled. Gross mean in percent a month; Sharpe ratios annualised; turnover in units of the long-short position a month; cost in percent a month on the quoted-spread series; net Sharpe on that series and on Corwin-Schultz alone."
+#| tbl-cap: "Decile long-short portfolios, value-weighted, test years pooled. Gross mean in percent a month; Sharpe ratios annualised; turnover in units of the long-short position a month; cost in percent a month at half the quoted spread; net Sharpe at that cost. The last two columns repeat the cost and the net Sharpe with Corwin-Schultz in place of the quoted spread, as a bound."
 #| echo: false
 
 rows = []
@@ -1420,8 +1462,8 @@ for u, uname in [("all", "all stocks"), ("ex_small", "ex micro and nano")]:
             rows.append(f"| {S1_LAB[m]}, {s} | {r['gross_mean_pm']:.2f} | {r['gross_sharpe']:.2f} | "
                         f"{r['turnover_pm']:.2f} | {r['cost_pm']:.2f} | {f2(r['net_sharpe'])} | "
                         f"{r['cost_cs_pm']:.2f} | {f2(r['net_cs_sharpe'])} |")
-Markdown("| Portfolio | gross mean | gross Sharpe | turnover | cost, quoted | net Sharpe, quoted | "
-         "cost, Corwin-Schultz | net Sharpe, Corwin-Schultz |\n"
+Markdown("| Portfolio | gross mean | gross Sharpe | turnover | cost | net Sharpe | "
+         "cost, CS bound | net Sharpe, CS bound |\n"
          "|-------------------------------------|------:|------:|------:|------:|------:|------:|------:|\n"
          + "\n".join(rows))
 ```
@@ -1439,25 +1481,70 @@ ew_cost = {m: pt(m, "full", "ew", "all")["cost_pm"] for m in S1_MODELS}
 Three things in @tbl-s1-port. Gross, the value-weighted books earn between
 `{python} f"{min(pt(m,'full','vw','all')['gross_mean_pm'] for m in S1_MODELS):.2f}"` and
 `{python} f"{max(pt(m,'full','vw','all')['gross_mean_pm'] for m in S1_MODELS):.2f}"`
-percent a month on the full set, the networks at the top. Net of the quoted spread the
-best is the `{python} S1_LAB[best_vw]`, full set, with an annualised Sharpe ratio of
+percent a month on the full set, the networks at the top. Net of costs the best is the
+`{python} S1_LAB[best_vw]`, full set, with an annualised Sharpe ratio of
 `{python} f"{pt(best_vw,'full','vw','all')['net_sharpe']:.2f}"`; the Huber regression nets
-`{python} f"{pt('huber','full','vw','all')['net_sharpe']:.2f}"`. On Corwin-Schultz costs
-the same two books net `{python} f"{pt(best_vw,'full','vw','all')['net_cs_sharpe']:.2f}"`
+`{python} f"{pt('huber','full','vw','all')['net_sharpe']:.2f}"`. Under the Corwin-Schultz
+bound the same two books net `{python} f"{pt(best_vw,'full','vw','all')['net_cs_sharpe']:.2f}"`
 and `{python} f"{pt('huber','full','vw','all')['net_cs_sharpe']:.2f}"`, and several of the
-public-set linear books net nothing. Which spread one believes decides whether the linear
-models survive costs; it does not change the ordering.
+public-set linear books net nothing; the bound does not change the ordering.
 
-The public set is below the full set in every book, gross and net. For the Huber
-regression on all stocks the gross mean falls from
-`{python} f"{pt('huber','full','vw','all')['gross_mean_pm']:.2f}"` to
-`{python} f"{pt('huber','public','vw','all')['gross_mean_pm']:.2f}"` percent a month and
-the net Sharpe ratio from `{python} f"{pt('huber','full','vw','all')['net_sharpe']:.2f}"`
-to `{python} f"{pt('huber','public','vw','all')['net_sharpe']:.2f}"`; for the two-layer
-network from `{python} f"{pt('nn2','full','vw','all')['net_sharpe']:.2f}"` to
-`{python} f"{pt('nn2','public','vw','all')['net_sharpe']:.2f}"`. A backtest that uses
-every characteristic over the whole sample overstates what was available at the time by
-these amounts.
+The public set is below the full set in every book, gross and net. Whether the gap is
+more than noise is a question about the monthly difference between the two long-short
+returns, and @tbl-s1-fullpub tests it two ways: the mean of the monthly difference in
+gross returns with a Newey-West $t$-statistic at twelve lags, and the difference in net
+Sharpe ratios with the @ledoit2008 test, which applies the delta method to the two
+means and two second moments under the same Newey-West covariance.
+
+```{python}
+#| label: tbl-s1-fullpub
+#| tbl-cap: "Full minus public, by book. Mean monthly difference in gross long-short return, in percentage points, with a Newey-West t-statistic; and the difference in annualised net Sharpe ratios with the Ledoit-Wolf t-statistic."
+#| echo: false
+
+rows = []
+for m in S1_MODELS:
+    cells = []
+    for w, u, _ in BOOKS:
+        r = FP[(m, w, u)]
+        cells.append(f"{r['dmean']:+.2f} ({r['t_nw']:.1f})")
+        cells.append(f"{r['dsr']:+.2f} ({r['t_lw']:.1f})")
+    rows.append(f"| {S1_LAB[m]} | " + " | ".join(cells) + " |")
+Markdown("| Model | VW all: mean diff. | VW all: Sharpe diff. | VW ex micro and nano: mean diff. | "
+         "VW ex micro and nano: Sharpe diff. | EW all: mean diff. | EW all: Sharpe diff. | "
+         "EW ex micro and nano: mean diff. | EW ex micro and nano: Sharpe diff. |\n"
+         "|------------------------|------:|------:|------:|------:|------:|------:|------:|------:|\n"
+         + "\n".join(rows))
+```
+
+```{python}
+#| label: s1-fullpub-numbers
+#| echo: false
+
+pass_all = [m for m in S1_MODELS if all(FP[(m, w, u)]["t_lw"] > 2 for w, u, _ in BOOKS)]
+pass_none = [m for m in S1_MODELS if all(FP[(m, w, u)]["t_lw"] < 2 for w, u, _ in BOOKS)]
+pass_some = [m for m in S1_MODELS if m not in pass_all and m not in pass_none]
+hv = FP[("huber", "vw", "all")]
+n_books = len(S1_MODELS) * len(BOOKS)
+n_pass_sr = sum(FP[k]["t_lw"] > 2 for k in FP)
+n_pass_mean = sum(FP[k]["t_nw"] > 2 for k in FP)
+```
+
+The gap survives the test for the linear models and not for the trees. For the
+value-weighted Huber book on all stocks the full set earns
+`{python} f"{hv['dmean']:.2f}"` percentage points a month more than the public set
+(t = `{python} f"{hv['t_nw']:.1f}"`), and its net Sharpe ratio is higher by
+`{python} f"{hv['dsr']:.2f}"` (Ledoit-Wolf t = `{python} f"{hv['t_lw']:.1f}"`), which is
+the difference between `{python} f"{pt('huber','full','vw','all')['net_sharpe']:.2f}"` and
+`{python} f"{pt('huber','public','vw','all')['net_sharpe']:.2f}"` in @tbl-s1-port. The
+Sharpe difference clears t = 2 in all four books for
+`{python} "; ".join(S1_LAB[m] for m in pass_all)`; in none of the four for
+`{python} "; ".join(S1_LAB[m] for m in pass_none)`; and in some books for
+`{python} "; ".join(S1_LAB[m] for m in pass_some)`. Over the
+`{python} n_books` model-book pairs, `{python} n_pass_sr` Sharpe differences and
+`{python} n_pass_mean` mean differences clear t = 2. For the linear models, then, a
+backtest that uses every characteristic over the whole sample overstates the net Sharpe
+ratio that was available at the time by about a third of a unit, and the overstatement
+is not noise. For the trees the two sets are indistinguishable.
 
 The equal-weighted books, in `output/stage1_portfolio_summary.csv`, are the ones that
 look spectacular and are not. Gross they earn Sharpe ratios of
@@ -1534,64 +1621,73 @@ Markdown("| Outcome | post | s.e. | t | rows |\n"
 
 pre_h = ev("huber", "imp_bp", "bin_-10 to -6", "t", "bins")
 post_bins_h = [ev("huber", "imp_bp", b, "t", "bins") for b in ("bin_0 to 4", "bin_5 to 9", "bin_10+")]
+posts = s1_ev[s1_ev["spec"] == "post"]
+bins_ = s1_ev[s1_ev["spec"] == "bins"]
+N_PAIRS = len(posts)
+M_PAIRS = int((posts["t"].abs() > 2).sum())
+N_BINS = len(bins_)
+M_BINS = int((bins_["t"].abs() > 2).sum())
+OUT_LAB = {"imp_bp": "importance in error units", "share": "importance share",
+           "log_abs_beta": "log slope", "abs_beta_bp": "slope in basis points",
+           "char_ic_x100": "own IC", "abs_char_ic_x100": "own absolute IC"}
+MOD_LAB = {"huber": "Huber", "gbrt": "trees", "nn3": "network", "huber_beta": "Huber", "char_ic": "characteristic"}
+M_NAMES = ", ".join(f"the {MOD_LAB[r.model]} {OUT_LAB[r.outcome]}"
+                    for r in posts[posts["t"].abs() > 2].itertuples())
 ```
 
-The sign is the opposite of the competed-away story, and it holds for the linear model
-only. For the Huber regression, importance rises after publication by
-`{python} f"{ev('huber','imp_bp','post','coef'):.3f}"` units
-(t = `{python} f"{ev('huber','imp_bp','post','t'):.2f}"`), or
-`{python} f"{ev('huber','share','post','coef'):.2f}"` percentage points of the year's
-total (t = `{python} f"{ev('huber','share','post','t'):.2f}"`), and each of the three
-post-publication bins is positive, with t between
-`{python} f"{min(post_bins_h):.1f}"` and `{python} f"{max(post_bins_h):.1f}"`, so the rise
-is spread over the years after publication and no single bin carries it. For the
-trees and the network the post coefficients are positive and not distinguishable from
-zero (t = `{python} f"{ev('gbrt','imp_bp','post','t'):.2f}"` and
-`{python} f"{ev('nn3','imp_bp','post','t'):.2f}"`).
+What the table shows, counted. There are `{python} N_PAIRS` model-outcome pairs in the
+post specification and `{python} N_BINS` binned coefficients. Of the post coefficients,
+`{python} M_PAIRS` have |t| above 2, `{python} M_NAMES`; of the binned coefficients,
+`{python} M_BINS` do. Every post coefficient on importance is positive, which is the
+opposite sign from the competed-away story, but only the Huber ones are distinguishable
+from zero, at t = `{python} f"{ev('huber','imp_bp','post','t'):.2f}"` in error units and
+t = `{python} f"{ev('huber','share','post','t'):.2f}"` as a share of the year's total; the
+trees and the network sit at t = `{python} f"{ev('gbrt','imp_bp','post','t'):.2f}"` and
+`{python} f"{ev('nn3','imp_bp','post','t'):.2f}"`. With this many outcomes looked at, two
+coefficients near t = 2 are what a search of this size turns up on its own, and the paper
+does not claim more.
 
-The decomposition says where the Huber rise comes from. The slope the model puts on a
-characteristic grows after publication, weakly: $\log|\beta|$ by
-`{python} f"{ev('huber_beta','log_abs_beta','post','coef'):.3f}"`
-(t = `{python} f"{ev('huber_beta','log_abs_beta','post','t'):.2f}"`), $|\beta|$ by
-`{python} f"{ev('huber_beta','abs_beta_bp','post','coef'):.1f}"` basis points
-(t = `{python} f"{ev('huber_beta','abs_beta_bp','post','t'):.2f}"`). The
-characteristic's own correlation with next month's return does not move:
-`{python} f"{ev('char_ic','char_ic_x100','post','coef'):+.3f}"` on the IC × 100
-(t = `{python} f"{ev('char_ic','char_ic_x100','post','t'):.2f}"`) and
-`{python} f"{ev('char_ic','abs_char_ic_x100','post','coef'):+.3f}"` on its absolute value
-(t = `{python} f"{ev('char_ic','abs_char_ic_x100','post','t'):.2f}"`). What rises after
-publication is how much the model leans on the characteristic, not how well the
-characteristic works out of sample. One mechanism fits: a published characteristic has,
-by construction, a long and strong in-sample record in the training data, and an
-expanding-window regression weights it accordingly; whether the record continues is a
-separate question, and the right panel says it neither improves nor collapses in the
-first ten years.
+The decomposition rows say that, if there is a Huber effect, it sits in the model and not
+in the characteristic: the slope grows weakly after publication ($\log|\beta|$ by
+`{python} f"{ev('huber_beta','log_abs_beta','post','coef'):.3f}"`,
+t = `{python} f"{ev('huber_beta','log_abs_beta','post','t'):.2f}"`; $|\beta|$ by
+`{python} f"{ev('huber_beta','abs_beta_bp','post','coef'):.1f}"` basis points,
+t = `{python} f"{ev('huber_beta','abs_beta_bp','post','t'):.2f}"`), and the
+characteristic's own correlation with next month's return does not move
+(`{python} f"{ev('char_ic','char_ic_x100','post','coef'):+.3f}"` on the IC × 100,
+t = `{python} f"{ev('char_ic','char_ic_x100','post','t'):.2f}"`;
+`{python} f"{ev('char_ic','abs_char_ic_x100','post','coef'):+.3f}"` on its absolute value,
+t = `{python} f"{ev('char_ic','abs_char_ic_x100','post','t'):.2f}"`). A published
+characteristic has, by construction, a long in-sample record in the training data, and an
+expanding-window regression weights it accordingly, which would produce this pattern
+without any change in the characteristic itself.
 
-Two cautions belong with the table. The earliest bin, six to ten years before
-publication, is below the reference for the Huber importance
-(t = `{python} f"{pre_h:.2f}"`), so part of the rise is already under way before the
+The post coefficient cannot yet be read as a publication effect, for two reasons. The
+earliest bin, six to ten years before publication, is below the reference for the Huber
+importance (t = `{python} f"{pre_h:.2f}"`), so the rise is already under way before the
 paper appears; working papers circulate for years before a journal issue, and the
 publication year in the characteristic list is a late date for the event. And
 publication is staggered, so this is a two-way fixed effects event study, and when the
 effect differs across publication cohorts the binned coefficients mix clean comparisons
 with ones that use already-published characteristics as controls [@goodmanbacon2021;
-@sun2021]. The table is the first pass; the interaction-weighted version is the planned
-check.
+@sun2021]. The @sun2021 interaction-weighted version is the next step, and no claim about
+publication and model reliance is made until it is in.
 
 ## What this section does and does not show
 
 It shows, on the usual stock-level data, how much a forecaster gains from knowing in
 advance which characteristics would be published: a few tenths of a point of
 out-of-sample $R^2$, a few hundredths of rank correlation, and a visible share of the
-Sharpe ratio of every book. It shows that the gross returns of the equal-weighted books
-are paid for in micro and nano caps, and that the choice between a high-low spread
-estimate and the quoted spread decides whether the linear books survive costs at all. And
-it shows that a model refit each year does not lean less on a characteristic after its
-paper appears; the linear model leans more, while the characteristic itself keeps doing
-what it did. It does not show which models are best: the ordering changes with the row
-set, and the Diebold-Mariano statistics among the full-set models are computed on the same
-squared loss whose sums the tails dominate. It does not measure decay in days, which is the
-next stage, and it does not test the cohort-robust version of the event study.
+Sharpe ratio of every book. For the linear models the gap in net Sharpe ratio survives a
+Ledoit-Wolf test in every book; for the trees it does not. It shows that the gross returns
+of the equal-weighted books are paid for in micro and nano caps, and that the quoted
+spread and the Corwin-Schultz bound give different answers on whether the public-set
+linear books survive costs. It does not show that publication changes what a model uses:
+two of ten post coefficients clear |t| = 2, both for the Huber importance, with a
+pre-trend in the same direction, and the cohort-robust version has not been run. It does
+not show which models are best: the ordering changes with the row set, and the
+Diebold-Mariano statistics among the full-set models are computed on the same squared loss
+whose sums the tails dominate. It does not measure decay in days, which is the next stage.
 
 :::
 

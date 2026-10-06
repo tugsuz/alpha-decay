@@ -24,10 +24,12 @@ abstract: |
   once that history is known. At the stock level, with 153 published characteristics as
   features, a model given only the characteristics that were public in each test year
   trails the usual model given all of them in every row set and every portfolio, by a
-  few tenths of a point of out-of-sample R-squared and a visible share of each book's
-  Sharpe ratio; that gap is the look-ahead in the usual setup. A model refit each year
-  does not lean less on a characteristic after its paper appears. The linear model leans
-  more, while the characteristic's own correlation with returns does not change.
+  few tenths of a point of out-of-sample R-squared; for the linear models the gap in net
+  Sharpe ratio, about a third of a unit, survives a Ledoit-Wolf test in every book. That
+  gap is the look-ahead in the usual setup. In event time around publication, a model
+  refit each year does not lean less on a characteristic after its paper appears; the one
+  estimate that clears conventional significance comes with a pre-trend and is reported
+  as a first pass.
 
 format:
   html:
