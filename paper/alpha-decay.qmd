@@ -102,7 +102,9 @@ sample and a decade more data. Mean long-short returns fall 45 percent from the
 original sample window to the post-publication window, and the median signal loses
 53 percent. We then test the restriction that separates the two explanations of the
 decline, arbitrage after publication and selection in the original sample, and we fail
-to reject it: the three-window design does not identify the channel in this universe.
+to reject it; an event study built for staggered publication dates puts the effect of
+publication itself, against the five years before it, at zero. The design does not
+identify the channel in this universe.
 We rebuild two of the input series from security-level CRSP data as a check on the
 dataset everything else rests on.
 
@@ -119,9 +121,9 @@ were public in each test year and once on all of them. The second set, which is 
 one and contains look-ahead, is ahead of the first in every model, every row set and every
 portfolio, by a few tenths of a point of out-of-sample R², and for the linear models the
 gap in net Sharpe ratio, about a third of a unit, survives a Ledoit-Wolf test in every
-book. In event time around each characteristic's publication the model does not lean
-less on it afterwards; the one estimate that clears conventional significance, for the
-linear model, comes with a pre-trend, so it is reported as a first pass.
+book. In event time around each characteristic's publication, with an estimator built for
+staggered dates, the model does not change how much it leans on a characteristic when its
+paper appears.
 :::
 
 @sec-data describes the data, @sec-design the design and the estimator, @sec-result1
@@ -532,9 +534,132 @@ A second limitation concerns calendar time. Publication years in this universe c
 between the early 1990s and the mid-2010s, so for most signals "after publication" also
 means "after about 2001". @chordia2014 document a decline in anomaly returns across the
 board after decimalization, with growth in hedge fund assets, short interest and turnover
-as the drivers. A specification with calendar-time fixed effects would separate the two,
+as the drivers. A specification with calendar-time fixed effects separates the two,
 and with staggered publication dates it is identified from the timing differences across
-signals. We have not run it here; it is the first item in @sec-next.
+signals. The next subsection runs it, with an estimator built for staggered dates.
+
+## A cohort-robust estimate {#sec-sunabraham}
+
+@eq-main is a two-way fixed effects regression with staggered adoption. @goodmanbacon2021
+shows that its post coefficient is a weighted average of every two-group comparison in
+the panel, including the ones that use already-published signals as controls for signals
+published later. When the effect changes with time since publication, and a decline that
+goes on for years is such an effect, those comparisons subtract the early signals'
+deepening decline from the later signals' estimate. @sun2021 fit one set of event-time
+dummies per publication cohort, with a reference bin and a control cohort left out, and
+average the cohort estimates within each bin with the cohort's share of that bin. Each
+cohort estimate is then a comparison with signals not yet published, in the same calendar
+months, and the calendar-month effects absorb the common decline.
+
+```{python}
+#| label: sa-load
+#| code-fold: true
+#| code-summary: "read the Sun-Abraham estimates written by 02_decay_panel.py"
+
+sa1 = pd.read_csv(OUT / "result1_sunabraham.csv")
+SA1_CUTOFFS = list(dict.fromkeys(sa1["control_cutoff"]))
+SA1_MAIN = SA1_CUTOFFS[0]
+SA1_BINS = [b for b in dict.fromkeys(sa1["term"]) if b != "post"]
+
+def sa1_row(cutoff, est, term):
+    r = sa1[(sa1["control_cutoff"] == cutoff) & (sa1["estimator"] == est) & (sa1["term"] == term)]
+    return r.iloc[0]
+
+sa1_main = sa1_row(SA1_MAIN, "sun_abraham", "post")
+tw1_main = sa1_row(SA1_MAIN, "twfe_pooled", "post")
+
+def fz(x, d=3, sign=True):
+    """Format a number, with no minus sign on a value that rounds to zero."""
+    v = f"{x:+.{d}f}" if sign else f"{x:.{d}f}"
+    return v.replace("-", "+" if sign else "") if float(v) == 0 else v
+
+def ct(x, d=3):
+    return f"{fz(x, d)} ({fz(x, 1, sign=False) if abs(x) < 5e-2 else f'{x:.1f}'})"
+```
+
+Every signal in this universe is eventually published, so there is no never-treated
+group. The control cohort is the last-published one: the
+`{python} int(sa1_main["n_control_units"])` signals published in
+`{python} SA1_MAIN` or later, and the sample ends in `{python} sa1_main["period_last"]`, the
+month before the first of them is published. That is the cost of the design in plain
+terms: the last decade of post-publication data, which has no not-yet-published signal
+to compare against, drops out. Two other cutoffs are reported so the reader sees the
+trade between window length and control size. Event time is measured from publication in
+five-year bins, with the five years before publication as the reference. Publication
+comes a median four years after the paper's sample ends, so the reference bin sits
+mostly inside the post-sample window, and the earlier bins show the in-sample level
+against it. Standard errors are clustered by signal and by month; when the two-way
+matrix is not positive semi-definite the within-cell term is not subtracted, which is
+conservative, and the table says where that happened. The pooled two-way fixed effects
+bins on the same sample and controls are shown beside the Sun-Abraham bins.
+
+```{python}
+#| label: tbl-sa1
+#| tbl-cap: "Monthly long-short return in event time around publication, %/month relative to the five years before publication. Sun-Abraham and the pooled two-way fixed effects bins on the same sample. Post: the average over all post-publication cells, cross-bin covariances included. Pre-trend: joint test that the pre-publication bins are zero."
+#| echo: false
+
+rows = []
+for b in SA1_BINS + ["post"]:
+    cells = []
+    for cutoff in SA1_CUTOFFS:
+        for est in ("sun_abraham", "twfe_pooled"):
+            r = sa1_row(cutoff, est, b)
+            cells.append(f"{fz(r['coef'])} ({r['t']:.1f})")
+    label = "**post, all bins**" if b == "post" else b
+    rows.append(f"| {label} | " + " | ".join(cells) + " |")
+head = " | ".join(f"{c}, SA | {c}, TWFE" for c in SA1_CUTOFFS)
+Markdown(f"| Years since publication | {head} |\n"
+         "|------------------------|------:|------:|------:|------:|------:|------:|\n"
+         + "\n".join(rows))
+```
+
+```{python}
+#| label: sa1-foot
+#| echo: false
+
+parts = []
+for cutoff in SA1_CUTOFFS:
+    r = sa1_row(cutoff, "sun_abraham", "post")
+    parts.append(f"cutoff {cutoff}: sample to {r['period_last']}, {int(r['n_treated_units'])} treated and "
+                 f"{int(r['n_control_units'])} control signals, {int(r['n_cohorts'])} cohorts, "
+                 f"pre-trend p = {r['wald_pre_p']:.2f}")
+cons = [str(c) for c in SA1_CUTOFFS if sa1_row(c, "sun_abraham", "post")["conservative_cov"]]
+Markdown("Samples: " + "; ".join(parts) + ". The conservative covariance applies to the Sun-Abraham "
+         "columns at " + ("every cutoff" if len(cons) == len(SA1_CUTOFFS) else ", ".join(cons)) + ".")
+```
+
+![Event-time coefficients for the main cutoff, with 95 percent bands. Grey: pooled two-way fixed effects on the same sample. Blue: Sun-Abraham.](../output/fig02_sunabraham.png){#fig-sa1}
+
+```{python}
+#| label: sa1-numbers
+#| echo: false
+
+sa1_posts = [sa1_row(c, "sun_abraham", "post") for c in SA1_CUTOFFS]
+sa1_pre = [sa1_row(SA1_MAIN, "sun_abraham", b) for b in SA1_BINS if b.startswith("-")]
+```
+
+The cohort-robust estimate of the publication effect is zero. Against the five years
+before publication, the post-publication average is
+`{python} f"{sa1_main['coef']:+.3f}"` percent a month
+(t = `{python} f"{sa1_main['t']:.2f}"`) at the main cutoff, and
+`{python} ", ".join(f"{r['coef']:+.3f} (t = {r['t']:.2f})" for r in sa1_posts[1:])` at the
+other two; no post bin is distinguishable from zero at any cutoff. The two-way fixed
+effects bins on the same sample give `{python} f"{tw1_main['coef']:+.3f}"`
+(t = `{python} f"{tw1_main['t']:.2f}"`), which is the post-publication minus post-sample
+difference of @tbl-restriction again, and the cohort-robust version removes it. The
+in-sample bins sit above the reference by
+`{python} " and ".join(f"{r['coef']:.2f}" for r in sa1_pre)` percent a month, the direction
+of the decline in @tbl-windows, with bands that include zero. The standard errors are
+about twice those of the pooled regression, which is the price of estimating thirty
+cohorts separately and clustering two ways.
+
+What this adds to @sec-result1. The 45 percent decline from the in-sample window to the
+post-publication window is a comparison of levels and stands. The claim that
+publication itself takes the return down further, beyond where it already was in the
+years before the paper appeared, was not significant in the three-window regression and
+is zero in the estimator built for staggered dates. The design does not identify an
+effect of publication in this universe, and the cohort-robust estimate says so more
+plainly than the first one did.
 
 # Rebuilding two signals from CRSP {#sec-rebuild}
 
@@ -1577,10 +1702,9 @@ inside the test window. Importance enters in units of mean squared error scaled 
 $10^4$ and as a share of the year's total positive importance. A second specification
 replaces post with event-time bins, the five years before publication being the
 reference. Standard errors are clustered by characteristic and by year. The two-way
-covariance of @cameron2011 is not positive semi-definite in general, and here it was not:
-one bin coefficient came out with a negative variance. The matrix is made
-semi-definite by setting its negative eigenvalues to zero, as @cameron2011 suggest, and
-the standard errors reported are the ones after that step, which widens them.
+covariance of @cameron2011 is not positive semi-definite in general, and for the binned
+specification here it was not; where that happens the within-cell term is not
+subtracted, which is conservative, and the output records it.
 
 Permutation importance in a linear model is about $2\beta\,\mathrm{Cov}(y - \text{rest}, x)$
 on the test rows. It rises when the model leans harder on the characteristic and when the
@@ -1591,7 +1715,7 @@ Spearman correlation with the realised return over the test year.
 
 ```{python}
 #| label: tbl-s1-event
-#| tbl-cap: "Two-way fixed effects estimates of post. Standard errors clustered by characteristic and by year, after the positive semi-definite correction. Importance in mean squared error × 10,000 and as a share of the year's total, in percentage points; the Huber slope in log absolute value and in basis points; the characteristic's own IC × 100 and its absolute value × 100."
+#| tbl-cap: "Two-way fixed effects estimates of post. Standard errors clustered by characteristic and by year. Importance in mean squared error × 10,000 and as a share of the year's total, in percentage points; the Huber slope in log absolute value and in basis points; the characteristic's own IC × 100 and its absolute value × 100."
 #| echo: false
 
 spec = [("huber", "imp_bp", "Huber regression, importance (MSE × 10,000)"),
@@ -1662,16 +1786,101 @@ characteristic has, by construction, a long in-sample record in the training dat
 expanding-window regression weights it accordingly, which would produce this pattern
 without any change in the characteristic itself.
 
-The post coefficient cannot yet be read as a publication effect, for two reasons. The
+Two things stand against reading the post coefficient as a publication effect. The
 earliest bin, six to ten years before publication, is below the reference for the Huber
-importance (t = `{python} f"{pre_h:.2f}"`), so the rise is already under way before the
-paper appears; working papers circulate for years before a journal issue, and the
+importance (t = `{python} f"{pre_h:.2f}"`), which is the pattern of a rise already under
+way before the paper appears; working papers circulate for years before a journal issue, and the
 publication year in the characteristic list is a late date for the event. And
-publication is staggered, so this is a two-way fixed effects event study, and when the
-effect differs across publication cohorts the binned coefficients mix clean comparisons
-with ones that use already-published characteristics as controls [@goodmanbacon2021;
-@sun2021]. The @sun2021 interaction-weighted version is the next step, and no claim about
-publication and model reliance is made until it is in.
+publication is staggered, so this is a two-way fixed effects event study with the
+weighting problem of @sec-sunabraham. The same @sun2021 estimator is run here, on the
+same outcomes.
+
+```{python}
+#| label: sa7-load
+#| code-fold: true
+#| code-summary: "read the Sun-Abraham estimates written by 08_stage1_eventtime.py"
+
+sa7 = pd.read_csv(OUT / "stage1_sunabraham.csv")
+SA7_CUTOFFS = list(dict.fromkeys(sa7["control_cutoff"]))
+SA7_MAIN = SA7_CUTOFFS[0]
+
+def sa7_row(model, outcome, cutoff, est, term="post"):
+    r = sa7[(sa7["model"] == model) & (sa7["outcome"] == outcome) & (sa7["control_cutoff"] == cutoff)
+            & (sa7["estimator"] == est) & (sa7["term"] == term)]
+    return r.iloc[0]
+
+sa7_posts = sa7[sa7["term"] == "post"]
+N7 = {c: int(((sa7_posts["control_cutoff"] == c) & (sa7_posts["estimator"] == "sun_abraham")).sum()) for c in SA7_CUTOFFS}
+M7 = {c: int(((sa7_posts["control_cutoff"] == c) & (sa7_posts["estimator"] == "sun_abraham")
+              & (sa7_posts["t"].abs() > 2)).sum()) for c in SA7_CUTOFFS}
+h_main = sa7_row("huber", "imp_bp", SA7_MAIN, "sun_abraham")
+h_share = sa7_row("huber", "share", SA7_MAIN, "sun_abraham")
+h_pool = sa7_row("huber", "imp_bp", SA7_MAIN, "twfe_pooled")
+h_static = sa7_row("huber", "imp_bp", SA7_MAIN, "twfe_static")
+```
+
+The control cohort is the last-published one, the
+`{python} int(h_main["n_control_units"])` characteristics published in
+`{python} SA7_MAIN` or later, and the test years run to `{python} int(h_main["period_last"])`;
+a later cutoff, `{python} SA7_CUTOFFS[1]`, is reported beside it. The
+`{python} int(h_main["n_always_treated_dropped"])` characteristics that were already public
+in `{python} S1_FIRST` have no untreated year in the window and leave the estimation;
+in the two-way regression above they contributed to the year effects only.
+
+```{python}
+#| label: tbl-sa7
+#| tbl-cap: "The post average with the Sun-Abraham estimator, by outcome and control cutoff, with the pooled two-way fixed effects bins and the single post dummy on the same sample. t-statistics in parentheses."
+#| echo: false
+
+rows = []
+for m, o, name in spec:
+    cells = []
+    for c in SA7_CUTOFFS:
+        for est in ("sun_abraham", "twfe_pooled", "twfe_static"):
+            r = sa7_row(m, o, c, est)
+            cells.append(f"{fz(r['coef'])} ({fz(r['t'], 1)})")
+    rows.append(f"| {name} | " + " | ".join(cells) + " |")
+head = " | ".join(f"{c}: SA | {c}: TWFE bins | {c}: TWFE post" for c in SA7_CUTOFFS)
+Markdown(f"| Outcome | {head} |\n"
+         "|------------------------------------------------|------:|------:|------:|------:|------:|------:|\n"
+         + "\n".join(rows))
+```
+
+```{python}
+#| label: sa7-foot
+#| echo: false
+
+parts = []
+for c in SA7_CUTOFFS:
+    r = sa7_row("huber", "imp_bp", c, "sun_abraham")
+    parts.append(f"cutoff {c}: test years to {int(r['period_last'])}, {int(r['n_treated_units'])} treated and "
+                 f"{int(r['n_control_units'])} control characteristics")
+sa_flag = sa7_posts[sa7_posts["estimator"] == "sun_abraham"]["conservative_cov"]
+tw_flag = sa7_posts[sa7_posts["estimator"] != "sun_abraham"]["conservative_cov"]
+Markdown("Samples: " + "; ".join(parts) + f". The conservative covariance applies to {int(sa_flag.sum())} of the "
+         f"{len(sa_flag)} Sun-Abraham cells and {int(tw_flag.sum())} of the {len(tw_flag)} two-way fixed effects cells.")
+```
+
+![Huber importance share in event time, main cutoff, with 95 percent bands. Grey: pooled two-way fixed effects on the same sample. Blue: Sun-Abraham.](../output/fig07_sunabraham.png){#fig-sa7}
+
+The first-pass estimate does not survive. With the cohort-robust estimator the Huber
+post average is `{python} fz(h_main['coef'])` in error units
+(t = `{python} fz(h_main['t'], 2)`) and `{python} fz(h_share['coef'])` percentage
+points of the year's share (t = `{python} fz(h_share['t'], 2)`), and of the
+`{python} N7[SA7_MAIN]` model-outcome pairs `{python} M7[SA7_MAIN]` clear |t| = 2 at the
+main cutoff and `{python} M7[SA7_CUTOFFS[1]]` at the other. The two-way fixed effects
+regression gives the same answer once it is run on the sample the cohort-robust
+estimator can use: the binned version at `{python} f"{h_pool['coef']:+.3f}"`
+(t = `{python} f"{h_pool['t']:.2f}"`), the single post dummy at
+`{python} f"{h_static['coef']:+.3f}"` (t = `{python} f"{h_static['t']:.2f}"`). The
+t = `{python} f"{ev('huber','imp_bp','post','t'):.1f}"` of @tbl-s1-event was carried by
+the characteristics public before the first test year, which have no untreated years,
+and by the test years after `{python} int(h_main["period_last"])`, which have no
+not-yet-published characteristic to compare against. Neither is a comparison the
+estimator built for staggered dates can make. The section's event-time result is
+therefore a null: on the comparisons that are clean, a model refit each year does not
+change how much it leans on a characteristic when the characteristic's paper appears,
+in either direction.
 
 ## What this section does and does not show
 
@@ -1682,9 +1891,9 @@ Sharpe ratio of every book. For the linear models the gap in net Sharpe ratio su
 Ledoit-Wolf test in every book; for the trees it does not. It shows that the gross returns
 of the equal-weighted books are paid for in micro and nano caps, and that the quoted
 spread and the Corwin-Schultz bound give different answers on whether the public-set
-linear books survive costs. It does not show that publication changes what a model uses:
-two of ten post coefficients clear |t| = 2, both for the Huber importance, with a
-pre-trend in the same direction, and the cohort-robust version has not been run. It does
+linear books survive costs. It shows that publication does not detectably change what a model uses: the two
+first-pass coefficients that cleared |t| = 2 came from comparisons a cohort-robust
+estimator cannot make, and with that estimator none of ten does. It does
 not show which models are best: the ordering changes with the row set, and the
 Diebold-Mariano statistics among the full-set models are computed on the same squared loss
 whose sums the tails dominate. It does not measure decay in days, which is the next stage.
@@ -1701,9 +1910,13 @@ estimator is a weighted average of all possible two-group comparisons, including
 comparisons that use already-published signals as controls for later-published ones.
 When the effect varies across signals or evolves over time, and decay that continues
 for years after publication is an effect that evolves, those comparisons enter with the
-wrong sign. @callaway2021 and @sun2021 estimate the effect using only not-yet-published
-signals as controls, and the same estimators absorb the calendar-time decline discussed
-in @sec-result1. This is the next thing to build, and it should change the number.
+wrong sign. @sec-sunabraham runs the @sun2021 estimator, which uses only not-yet-published
+signals as controls and absorbs the calendar-time decline with month effects, and it
+takes the post-publication coefficient to zero against the five years before publication.
+The price is the window: with no never-published signal the last decade of data has no
+control and drops out. A stacked regression with one clean window per cohort
+[@cengiz2019], and the @callaway2021 estimator with not-yet-published signals as
+controls, are the remaining checks.
 
 Regression discontinuity does not apply. It needs a running variable with a cutoff and
 units that cannot manipulate their position around it. Here the running variable would
@@ -1748,8 +1961,8 @@ global factor data would turn the same hypothesis into a cross-country test, and
 
 - Re-run on the @mclean2016 97 to see whether the weaker channel separation is a
   composition effect.
-- Replace @eq-main with the @callaway2021 and @sun2021 estimators and report how much
-  the estimate moves[; the same for the event-time regression on importance in
+- The @callaway2021 estimator and a stacked regression beside the @sun2021 estimate of
+  @sec-sunabraham[, and of the event-time regression on importance in
   @sec-stage1]{.content-visible unless-profile="course"}.
 - Gross profitability as a third rebuilt signal; it needs Compustat and the CCM link.
 

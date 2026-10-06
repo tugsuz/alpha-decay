@@ -8,6 +8,7 @@ abstract: |
   fall 45 percent from the original sample window to the post-publication window, and
   the median signal loses 53 percent. The increment attributable to publication itself,
   over and above the decline that had already set in when the original sample ended, is
-  not statistically significant, so the design does not separate arbitrage from
-  selection in this universe. We rebuild two of the input series from security-level
+  not statistically significant, and a Sun-Abraham event study that compares each signal
+  only with signals not yet published puts it at zero, so the design does not separate
+  arbitrage from selection in this universe. We rebuild two of the input series from security-level
   CRSP data to check the dataset.

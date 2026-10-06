@@ -15,8 +15,9 @@ abstract: |
   fall 45 percent from the original sample window to the post-publication window, and
   the median signal loses 53 percent. The increment attributable to publication itself,
   over and above the decline that had already set in when the original sample ended, is
-  not statistically significant, so the design does not separate arbitrage from
-  selection in this universe. We rebuild two of the input series from security-level
+  not statistically significant, and a Sun-Abraham event study that compares each signal
+  only with signals not yet published puts it at zero, so the design does not separate
+  arbitrage from selection in this universe. We rebuild two of the input series from security-level
   CRSP data to check the dataset. A real-time forecasting exercise over 1995 to 2024
   finds that next month's return on a published signal is weakly predictable, that no
   model beats another by a margin a test can distinguish, and that the predictive
@@ -26,10 +27,9 @@ abstract: |
   trails the usual model given all of them in every row set and every portfolio, by a
   few tenths of a point of out-of-sample R-squared; for the linear models the gap in net
   Sharpe ratio, about a third of a unit, survives a Ledoit-Wolf test in every book. That
-  gap is the look-ahead in the usual setup. In event time around publication, a model
-  refit each year does not lean less on a characteristic after its paper appears; the one
-  estimate that clears conventional significance comes with a pre-trend and is reported
-  as a first pass.
+  gap is the look-ahead in the usual setup. In event time around publication, with the
+  same cohort-robust estimator, a model refit each year does not change how much it
+  leans on a characteristic when the characteristic's paper appears.
 
 format:
   html:
