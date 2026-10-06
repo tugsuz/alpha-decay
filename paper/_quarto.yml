@@ -21,7 +21,13 @@ abstract: |
   finds that next month's return on a published signal is weakly predictable, that no
   model beats another by a margin a test can distinguish, and that the predictive
   content sits in the signal's own return history: the publication clock adds nothing
-  once that history is known.
+  once that history is known. At the stock level, with 153 published characteristics as
+  features, a model given only the characteristics that were public in each test year
+  trails the usual model given all of them in every row set and every portfolio, by a
+  few tenths of a point of out-of-sample R-squared and a visible share of each book's
+  Sharpe ratio; that gap is the look-ahead in the usual setup. A model refit each year
+  does not lean less on a characteristic after its paper appears. The linear model leans
+  more, while the characteristic's own correlation with returns does not change.
 
 format:
   html:

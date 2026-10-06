@@ -113,13 +113,21 @@ is modest. A linear regression and gradient boosted trees each earn an out-of-sa
 below one percent, no model beats another by a margin a test can distinguish, and almost
 all of the predictive content sits in the signal's own return history. Holding every
 published signal with equal weight earns a higher Sharpe ratio than any model-based
-selection.
+selection. We then move the same question to individual stocks, with 153 published
+characteristics as features, and fit every model twice: once on the characteristics that
+were public in each test year and once on all of them. The second set, which is the usual
+one and contains look-ahead, is ahead of the first in every model, every row set and every
+portfolio, by a few tenths of a point of out-of-sample R² and a visible share of each
+book's Sharpe ratio. A model refit each year does not lean less on a characteristic after
+its paper appears; the linear model leans more, while the characteristic's own
+correlation with returns does not change.
 :::
 
 @sec-data describes the data, @sec-design the design and the estimator, @sec-result1
 the results and the restriction test, @sec-rebuild the CRSP rebuild[, @sec-ml the
-forecasting exercise]{.content-visible unless-profile="course"}. @sec-next sets out what
-the design cannot do and what comes next.
+forecasting exercise on the anomaly panel and @sec-stage1 the stock-level
+one]{.content-visible unless-profile="course"}. @sec-next sets out what the design cannot
+do and what comes next.
 
 # Data {#sec-data}
 
@@ -1120,6 +1128,471 @@ and a model given the underlying stock-level data would face a different problem
 also does not touch the horizon a trading desk means by decay, which would need daily
 or intraday portfolio returns.
 
+# Stock-level forecasts with and without look-ahead {#sec-stage1}
+
+The panel above has one row per published signal and about 48,000 test rows. The
+question is usually asked one level down, on individual stocks, with the characteristics
+as features [@gu2020], and that is where the two things this paper cares about can be
+measured directly. The first is look-ahead in the choice of features. A model fitted
+today on every characteristic that has ever been published uses, in 1995, characteristics
+whose papers appeared in 2010. The gap between that model and one restricted to the
+characteristics that were public at the time is what a forecaster gains from knowing today
+which characteristics would later be published. The second is what the model does with a
+characteristic once it is public. If publication competes an edge away, a model refit each
+year should lean less on a characteristic after its paper appears.
+
+## Data and two decisions made before the models ran
+
+```{python}
+#| label: s1-load
+#| code-fold: true
+#| code-summary: "read the committed outputs of 07_stage1_models.py and 08_stage1_eventtime.py"
+
+import json
+S1_RUN = json.loads((OUT / "stage1_run.json").read_text())
+s1_r2 = pd.read_csv(OUT / "stage1_r2.csv")
+s1_r2_all = s1_r2[s1_r2["year"].astype(str) == "all"].set_index(["model", "set", "universe"])["r2"]
+s1_n = s1_r2[s1_r2["year"].astype(str) == "all"].groupby("universe")["n"].first()
+s1_ic = pd.read_csv(OUT / "stage1_ic.csv").set_index(["model", "set", "universe"])
+s1_dm = pd.read_csv(OUT / "stage1_dm.csv")
+s1_port = pd.read_csv(OUT / "stage1_portfolio_summary.csv").set_index(["model", "set", "weighting", "universe"])
+s1_sp = pd.read_csv(OUT / "stage1_spreads_panel.csv").set_index("size_grp")
+s1_tr = pd.read_csv(OUT / "stage1_spreads_traded.csv")
+s1_tgt = pd.read_csv(OUT / "stage1_target.csv")
+s1_top = pd.read_csv(OUT / "stage1_target_top.csv")
+s1_ev = pd.read_csv(OUT / "stage1_eventtime.csv")
+s1_chars = pd.read_csv(ROOT / "jkp_characteristics.csv")
+s1_tuning = pd.read_csv(OUT / "stage1_tuning.csv")
+
+S1_MODELS = ["huber", "enet", "pcr", "pls", "gbrt", "gbrth", "nn1", "nn2", "nn3"]
+S1_LAB = {"huber": "Huber regression", "enet": "elastic net", "pcr": "principal components",
+          "pls": "partial least squares", "gbrt": "boosted trees, squared loss",
+          "gbrth": "boosted trees, Huber loss", "nn1": "network, 1 layer",
+          "nn2": "network, 2 layers", "nn3": "network, 3 layers"}
+SIZE_ORDER = ["mega", "large", "small", "micro", "nano"]
+S1_FIRST, S1_LAST = S1_RUN["flags"]["first_test"], S1_RUN["flags"]["last_test"]
+N_CHARS = len(s1_chars)
+N_PUBLIC_FIRST = int((s1_chars["pub_year"] < S1_FIRST).sum())
+YEAR_ALL_PUBLIC = int(s1_chars["pub_year"].max()) + 1
+N_INSIDE = int(s1_chars["pub_year"].between(S1_FIRST, S1_LAST).sum())
+N_TEST_S1 = int(s1_n["all"])
+SHARE_SMALL = 1 - s1_n["ex_small"] / s1_n["all"]
+
+def s1_dm_t(model, s, bench):
+    r = s1_dm[(s1_dm["model"] == model) & (s1_dm["set"] == s) & (s1_dm["benchmark"] == bench)]
+    return float(r["dm_t"].iloc[0])
+
+def ev(model, outcome, term, col, spec="post"):
+    r = s1_ev[(s1_ev["model"] == model) & (s1_ev["outcome"] == outcome) & (s1_ev["spec"] == spec)
+              & (s1_ev["term"] == term)]
+    return float(r[col].iloc[0])
+
+# the target diagnostic that fixed the first decision
+dominated = s1_tgt[s1_tgt["share_sq_top1"] > 0.5]
+top1 = s1_top[s1_top["rank"] == 1]
+top1_dom = top1[top1["year"].isin(dominated["year"])]
+```
+
+The panel is the United States part of the @jensen2023 global factor data on WRDS:
+common stocks on the main exchanges, one primary security per firm, from 1963 to 2025.
+The target is next month's excess return. The features are the `{python} N_CHARS`
+characteristics in that dataset for which a publication year is recorded, each ranked
+within its month across the whole universe and mapped to $[-1, 1]$, with missing values
+at zero. Two information sets are fitted on the same rows with the same grids and seeds.
+The *public* set holds the characteristics whose paper appeared before the test year,
+`{python} N_PUBLIC_FIRST` of them in `{python} S1_FIRST`; the *full* set holds all
+`{python} N_CHARS`, which is the usual setup and contains look-ahead. The two sets
+coincide from `{python} YEAR_ALL_PUBLIC` on, so the gap between them is identified from
+the earlier test years. Test years run from `{python} S1_FIRST` to `{python} S1_LAST`;
+the forecasts made at the end of December 2024, which target January 2025, fall outside
+the window. Time is kept by the target month as in @sec-ml: training rows have target
+months before the validation block, the validation block is the eight years before the
+test year, and nothing is refit after validation, so the model scored on a test year is
+the one that was early-stopped or selected on the validation years.
+
+Two decisions were made from diagnostics before any model was scored, and both changed
+the design.
+
+The first concerns the target. The realised returns carry a few absurd values. In
+`{python} len(dominated)` of the `{python} len(s1_tgt)` test years one stock-month holds
+more than half of the year's total squared return, and the largest single share is
+`{python} f"{100*s1_tgt['share_sq_top1'].max():.2f}"` percent. A table of those rows by
+category, written before any model ran (`output/stage1_target.csv`), shows what they are:
+in `{python} int((~top1_dom["crsp_return"]).sum())` of the `{python} len(dominated)`
+dominated years the largest row has no CRSP return and no CRSP identifier, and in
+`{python} int((top1_dom["prc_bucket"] == "<0.1").sum())` of them the price is under ten
+cents. They are Compustat-sourced rows for securities CRSP
+does not cover. The remedy that follows is the one applied: the panel keeps only rows
+whose return comes from CRSP, which removes `{python} f"{100*s1_tgt['share_not_crsp'].mean():.1f}"`
+percent of stock-months on average; the fitting and selection targets are clipped at the
+0.1 and 99.9 percentiles of the training returns, except for the Huber regression, whose
+loss is its own protection; and every forecast is scored against the raw realised return.
+Because the tails sit in particular rows, the $R^2$ is reported on three row sets: all
+`{python} f"{N_TEST_S1:,}"` test rows, the rows outside the micro and nano size groups,
+and the rows whose realised return is inside $\pm 100$ percent. A result that holds on
+one set and not another is reported as such.
+
+The second concerns trading costs, and is described with the portfolios below.
+
+## Models
+
+The models are those of @gu2020, in the same spirit of small grids: a Huber regression
+on all features, an elastic net, principal-component and partial-least-squares
+regressions, gradient boosted trees [@ke2017], and feed-forward networks with one, two
+and three hidden layers of 32, 16 and 8 units, each an average over five seeds. The trees
+are fitted twice, once with squared loss and once with a Huber loss, because the two
+disagree in a way the reader should see: the Huber-loss trees centre their forecasts
+below the realised mean, which gives them a negative $R^2$ against a zero forecast and,
+at the same time, the highest rank correlation with realised returns of any model. Both
+are reported. Every setting tried is in `output/stage1_tuning.csv`,
+`{python} f"{len(s1_tuning):,}"` rows.
+
+## Forecast accuracy
+
+```{python}
+#| label: tbl-s1-r2
+#| tbl-cap: "Out-of-sample R² against a zero forecast, in percent, pooled over the test years. Public: characteristics published before the test year. Full: all characteristics. Three row sets, as described in the text."
+#| echo: false
+
+rows = []
+for m in S1_MODELS:
+    cells = []
+    for u in ["all", "ex_small", "abs_y_le_1"]:
+        for s in ["public", "full"]:
+            cells.append(f"{100*s1_r2_all.loc[(m, s, u)]:+.2f}")
+    rows.append(f"| {S1_LAB[m]} | " + " | ".join(cells) + " |")
+Markdown("| Model | all, public | all, full | ex micro and nano, public | ex micro and nano, full | "
+         "abs. return under 100%, public | abs. return under 100%, full |\n"
+         "|-----------------------------|------:|------:|------:|------:|------:|------:|\n"
+         + "\n".join(rows))
+```
+
+```{python}
+#| label: tbl-s1-ic
+#| tbl-cap: "Rank IC: the monthly Spearman correlation between forecast and realised return, averaged over the test months, with a Newey-West t-statistic at twelve lags. Added after the first pass, when the R² turned out to depend on a handful of rows."
+#| echo: false
+
+rows = []
+for m in S1_MODELS:
+    cells = []
+    for u in ["all", "ex_small"]:
+        for s in ["public", "full"]:
+            r = s1_ic.loc[(m, s, u)]
+            cells.append(f"{r['ic_mean']:.3f} ({r['t_nw']:.1f})")
+    rows.append(f"| {S1_LAB[m]} | " + " | ".join(cells) + " |")
+Markdown("| Model | all, public | all, full | ex micro and nano, public | ex micro and nano, full |\n"
+         "|-----------------------------|------------:|------------:|------------:|------------:|\n"
+         + "\n".join(rows))
+```
+
+```{python}
+#| label: s1-r2-numbers
+#| echo: false
+
+full_all = {m: 100 * s1_r2_all.loc[(m, "full", "all")] for m in S1_MODELS}
+pub_all = {m: 100 * s1_r2_all.loc[(m, "public", "all")] for m in S1_MODELS}
+gap = {m: full_all[m] - pub_all[m] for m in S1_MODELS}
+ic_full = {m: s1_ic.loc[(m, "full", "all"), "ic_mean"] for m in S1_MODELS}
+ic_ex = {m: s1_ic.loc[(m, "full", "ex_small"), "ic_mean"] for m in S1_MODELS}
+ordinary = [m for m in S1_MODELS if m != "gbrth"]
+best_all = max(ordinary, key=full_all.get)
+dm_fp = {m: s1_dm_t(m, "full", f"{m}_public") for m in S1_MODELS}
+```
+
+Four readings of @tbl-s1-r2 and @tbl-s1-ic.
+
+The level is the one @gu2020 report for monthly stock returns. Against a zero forecast
+the full-information models explain between
+`{python} f"{min(full_all[m] for m in ordinary):.2f}"` and
+`{python} f"{max(full_all[m] for m in ordinary):.2f}"` percent of next month's variation
+on all rows, the three-layer network highest at
+`{python} f"{full_all['nn3']:.2f}"` percent and the Huber regression at
+`{python} f"{full_all['huber']:.2f}"`.
+
+The public set is below the full set in every cell of both tables. On all rows the gap is
+between `{python} f"{min(gap[m] for m in ordinary):.2f}"` and
+`{python} f"{max(gap[m] for m in ordinary):.2f}"` percentage points of $R^2$; the
+Diebold-Mariano statistic of each model against its own public version is
+`{python} f"{dm_fp['huber']:.1f}"` for the Huber regression,
+`{python} f"{dm_fp['gbrt']:.1f}"` for the squared-loss trees and
+`{python} f"{dm_fp['nn3']:.1f}"` for the three-layer network. Knowing in 1995 which
+characteristics would be published over the next twenty-five years is worth about
+`{python} f"{np.mean([gap[m] for m in ordinary]):.2f}"` points of out-of-sample $R^2$,
+and on rank correlation about
+`{python} f"{np.mean([ic_full[m] - s1_ic.loc[(m, 'public', 'all'), 'ic_mean'] for m in ordinary]):.3f}"`.
+That is the size of the look-ahead in the usual setup, measured on the usual data.
+
+The ordering of models is not stable across row sets. The squared-loss trees sit in the
+middle on all rows and near zero once returns beyond $\pm 100$ percent are removed; the
+Huber-loss trees are negative on all rows, highest on that set, and highest on rank
+correlation on every set. A reader who wants one number should take the rank IC, which
+does not depend on where the tails fall: it is between
+`{python} f"{min(ic_full[m] for m in ordinary):.3f}"` and
+`{python} f"{max(ic_full.values()):.3f}"` on all rows for the full set, and between
+`{python} f"{min(ic_ex.values()):.3f}"` and `{python} f"{max(ic_ex.values()):.3f}"` outside
+the micro and nano groups, with $t$-statistics above `{python} f"{int(np.floor(s1_ic['t_nw'].min()))}"`
+throughout. The nonlinear models are not uniformly ahead of the linear ones on it.
+
+Finally, `{python} f"{100*SHARE_SMALL:.0f}"` percent of the stock-months are micro or
+nano caps, and the forecasts are weaker outside them: the rank IC falls by about half
+and the Huber regression's $R^2$ on that set is `{python} f"{100*s1_r2_all.loc[('huber','full','ex_small')]:.2f}"`
+percent. The portfolios below make the same point in dollars.
+
+## Portfolios and the cost of trading them
+
+```{python}
+#| label: s1-port-numbers
+#| echo: false
+
+def pt(m, s, w, u):
+    return s1_port.loc[(m, s, w, u)]
+
+def f2(x):
+    v = f"{x:.2f}"
+    return "0.00" if v == "-0.00" else v
+
+cs_vw = s1_tr[(s1_tr["model"] == "huber") & (s1_tr["set"] == "full") & (s1_tr["weighting"] == "vw")
+              & (s1_tr["universe"] == "all")].set_index("size_grp")
+ew_small_share = s1_tr[(s1_tr["set"] == "full") & (s1_tr["weighting"] == "ew") & (s1_tr["universe"] == "all")
+                       & s1_tr["size_grp"].isin(["micro", "nano"])].groupby("model")["traded_weight_share"].sum()
+quoted_share = s1_port["quoted_share_of_traded"].min()
+```
+
+Each month the stocks are sorted into deciles on the forecast, the top decile is held
+long and the bottom decile short, equal- or value-weighted, with and without the micro
+and nano groups. Turnover is half the sum of absolute weight changes, and each traded
+dollar is charged half a spread.
+
+The second decision is which spread. The first pass charged half of the
+@corwin2012 estimate that comes with the panel, averaged over 21 days. The traded-weighted
+spread it implied in a value-weighted book was about one percent, which is too high
+after 2001 for stocks above the NYSE 20th size percentile, and the estimate is noisy and
+floored at zero, which pushes its mean up. So the costs here use the month's mean closing
+quoted spread from the CRSP daily file, $(\text{ask} - \text{bid}) / \text{midpoint}$ on
+days with a positive quote, which @chung2014 show tracks TAQ effective spreads closely;
+for liquid stocks it is an upper bound, since trades print inside the quote. The
+Corwin-Schultz estimate is the fallback where no quote exists, and the @abdi2017
+estimate from daily high, low and close is a third reading that needs no quotes. The
+quoted spread prices at least `{python} f"{100*quoted_share:.0f}"` percent of traded
+weight in every book, and both cost series are reported.
+
+```{python}
+#| label: tbl-s1-spreads
+#| tbl-cap: "Full spreads over the test rows, by size group, in percent. Medians of the Corwin-Schultz estimate, the CRSP closing quoted spread and the Abdi-Ranaldo estimate; then, for the value-weighted Huber book on all rows, each group's share of traded weight and the traded-weighted spread on the two cost series."
+#| echo: false
+
+rows = []
+for g in SIZE_ORDER:
+    r = s1_sp.loc[g]
+    t = cs_vw.loc[g]
+    rows.append(f"| {g} | {100*r['cs_median']:.2f} | {100*r['quoted_median']:.2f} | {100*r['ar_median']:.2f} | "
+                f"{100*t['traded_weight_share']:.1f} | {100*t['full_spread_used']:.2f} | {100*t['full_spread_cs']:.2f} |")
+Markdown("| Size group | Corwin-Schultz, median | quoted, median | Abdi-Ranaldo, median | "
+         "share of traded weight | traded-weighted spread, used | traded-weighted spread, Corwin-Schultz |\n"
+         "|--------|------:|------:|------:|------:|------:|------:|\n" + "\n".join(rows))
+```
+
+@tbl-s1-spreads is why the choice matters. For mega and large caps the quoted spread
+median is `{python} f"{100*s1_sp.loc['mega','quoted_median']:.2f}"` and
+`{python} f"{100*s1_sp.loc['large','quoted_median']:.2f}"` percent against Corwin-Schultz
+medians of `{python} f"{100*s1_sp.loc['mega','cs_median']:.2f}"` and
+`{python} f"{100*s1_sp.loc['large','cs_median']:.2f}"`; the two agree in the micro group
+and reverse in the nano group, where the quoted spread is wider. A value-weighted book
+puts `{python} f"{100*cs_vw.loc['mega','traded_weight_share']:.0f}"` percent of its
+trading in mega caps, so the series used charges it
+`{python} f"{100*cs_vw.loc['mega','full_spread_used']:.2f}"` percent there against
+`{python} f"{100*cs_vw.loc['mega','full_spread_cs']:.2f}"` on Corwin-Schultz. The
+traded-weighted spreads sit above the panel medians within every group, as they should
+when the extreme deciles hold the less liquid stocks of each group and the spread
+distribution is skewed.
+
+```{python}
+#| label: tbl-s1-port
+#| tbl-cap: "Decile long-short portfolios, value-weighted, test years pooled. Gross mean in percent a month; Sharpe ratios annualised; turnover in units of the long-short position a month; cost in percent a month on the quoted-spread series; net Sharpe on that series and on Corwin-Schultz alone."
+#| echo: false
+
+rows = []
+for u, uname in [("all", "all stocks"), ("ex_small", "ex micro and nano")]:
+    rows.append(f"| **{uname}** | | | | | | | |")
+    for m in S1_MODELS:
+        for s in ["public", "full"]:
+            r = pt(m, s, "vw", u)
+            rows.append(f"| {S1_LAB[m]}, {s} | {r['gross_mean_pm']:.2f} | {r['gross_sharpe']:.2f} | "
+                        f"{r['turnover_pm']:.2f} | {r['cost_pm']:.2f} | {f2(r['net_sharpe'])} | "
+                        f"{r['cost_cs_pm']:.2f} | {f2(r['net_cs_sharpe'])} |")
+Markdown("| Portfolio | gross mean | gross Sharpe | turnover | cost, quoted | net Sharpe, quoted | "
+         "cost, Corwin-Schultz | net Sharpe, Corwin-Schultz |\n"
+         "|-------------------------------------|------:|------:|------:|------:|------:|------:|------:|\n"
+         + "\n".join(rows))
+```
+
+```{python}
+#| label: s1-port-reading
+#| echo: false
+
+best_vw = max(S1_MODELS, key=lambda m: pt(m, "full", "vw", "all")["net_sharpe"])
+ew_gross = {m: pt(m, "full", "ew", "all")["gross_sharpe"] for m in S1_MODELS}
+ew_net = {m: pt(m, "full", "ew", "all")["net_sharpe"] for m in S1_MODELS}
+ew_cost = {m: pt(m, "full", "ew", "all")["cost_pm"] for m in S1_MODELS}
+```
+
+Three things in @tbl-s1-port. Gross, the value-weighted books earn between
+`{python} f"{min(pt(m,'full','vw','all')['gross_mean_pm'] for m in S1_MODELS):.2f}"` and
+`{python} f"{max(pt(m,'full','vw','all')['gross_mean_pm'] for m in S1_MODELS):.2f}"`
+percent a month on the full set, the networks at the top. Net of the quoted spread the
+best is the `{python} S1_LAB[best_vw]`, full set, with an annualised Sharpe ratio of
+`{python} f"{pt(best_vw,'full','vw','all')['net_sharpe']:.2f}"`; the Huber regression nets
+`{python} f"{pt('huber','full','vw','all')['net_sharpe']:.2f}"`. On Corwin-Schultz costs
+the same two books net `{python} f"{pt(best_vw,'full','vw','all')['net_cs_sharpe']:.2f}"`
+and `{python} f"{pt('huber','full','vw','all')['net_cs_sharpe']:.2f}"`, and several of the
+public-set linear books net nothing. Which spread one believes decides whether the linear
+models survive costs; it does not change the ordering.
+
+The public set is below the full set in every book, gross and net. For the Huber
+regression on all stocks the gross mean falls from
+`{python} f"{pt('huber','full','vw','all')['gross_mean_pm']:.2f}"` to
+`{python} f"{pt('huber','public','vw','all')['gross_mean_pm']:.2f}"` percent a month and
+the net Sharpe ratio from `{python} f"{pt('huber','full','vw','all')['net_sharpe']:.2f}"`
+to `{python} f"{pt('huber','public','vw','all')['net_sharpe']:.2f}"`; for the two-layer
+network from `{python} f"{pt('nn2','full','vw','all')['net_sharpe']:.2f}"` to
+`{python} f"{pt('nn2','public','vw','all')['net_sharpe']:.2f}"`. A backtest that uses
+every characteristic over the whole sample overstates what was available at the time by
+these amounts.
+
+The equal-weighted books, in `output/stage1_portfolio_summary.csv`, are the ones that
+look spectacular and are not. Gross they earn Sharpe ratios of
+`{python} f"{min(ew_gross.values()):.1f}"` to `{python} f"{max(ew_gross.values()):.1f}"`
+on the full set, because they put between
+`{python} f"{100*ew_small_share.min():.0f}"` and `{python} f"{100*ew_small_share.max():.0f}"`
+percent of their trading in micro and nano caps. They pay
+`{python} f"{min(ew_cost.values()):.1f}"` to `{python} f"{max(ew_cost.values()):.1f}"`
+percent a month for it on the quoted spread and net between
+`{python} f"{min(ew_net.values()):.2f}"` and `{python} f"{max(ew_net.values()):.2f}"`.
+The value-weighted books and the books without micro and nano caps are the ones an
+allocator could hold.
+
+## What the model uses, in event time around publication
+
+For the full-information model the run saves, in every test year, the permutation
+importance of every characteristic: the rise in test mean squared error when that column
+is shuffled. Put in event time, $e$ being the test year minus the characteristic's publication
+year, the question is whether the model leans less on a characteristic once it is public:
+
+$$
+\mathrm{imp}_{c,y} \;=\; a_c + d_y + b\,\mathrm{post}_{c,y} + e_{c,y},
+\qquad \mathrm{post}_{c,y} = \mathbf{1}[\,y \ge \text{pub}_c\,].
+$$
+
+Characteristic effects $a_c$ absorb how useful a characteristic is on average, year
+effects $d_y$ absorb anything that moves every importance in a year, and $b$ is
+identified from the `{python} N_INSIDE` characteristics whose publication year falls
+inside the test window. Importance enters in units of mean squared error scaled by
+$10^4$ and as a share of the year's total positive importance. A second specification
+replaces post with event-time bins, the five years before publication being the
+reference. Standard errors are clustered by characteristic and by year. The two-way
+covariance of @cameron2011 is not positive semi-definite in general, and here it was not:
+one bin coefficient came out with a negative variance. The matrix is made
+semi-definite by setting its negative eigenvalues to zero, as @cameron2011 suggest, and
+the standard errors reported are the ones after that step, which widens them.
+
+Permutation importance in a linear model is about $2\beta\,\mathrm{Cov}(y - \text{rest}, x)$
+on the test rows. It rises when the model leans harder on the characteristic and when the
+characteristic still covaries with the return out of sample, and the two can be
+separated. The same design is run on two more outcomes saved beside the forecasts: the
+Huber regression's slope on each characteristic, and the characteristic's own monthly
+Spearman correlation with the realised return over the test year.
+
+```{python}
+#| label: tbl-s1-event
+#| tbl-cap: "Two-way fixed effects estimates of post. Standard errors clustered by characteristic and by year, after the positive semi-definite correction. Importance in mean squared error × 10,000 and as a share of the year's total, in percentage points; the Huber slope in log absolute value and in basis points; the characteristic's own IC × 100 and its absolute value × 100."
+#| echo: false
+
+spec = [("huber", "imp_bp", "Huber regression, importance (MSE × 10,000)"),
+        ("huber", "share", "Huber regression, importance share (pp)"),
+        ("gbrt", "imp_bp", "boosted trees, importance (MSE × 10,000)"),
+        ("gbrt", "share", "boosted trees, importance share (pp)"),
+        ("nn3", "imp_bp", "network, 3 layers, importance (MSE × 10,000)"),
+        ("nn3", "share", "network, 3 layers, importance share (pp)"),
+        ("huber_beta", "log_abs_beta", "Huber slope, log of absolute value"),
+        ("huber_beta", "abs_beta_bp", "Huber slope, absolute value in bp"),
+        ("char_ic", "char_ic_x100", "characteristic's own IC × 100"),
+        ("char_ic", "abs_char_ic_x100", "characteristic's own IC, absolute value × 100")]
+rows = []
+for m, o, name in spec:
+    rows.append(f"| {name} | {ev(m, o, 'post', 'coef'):+.3f} | {ev(m, o, 'post', 'se'):.3f} | "
+                f"{ev(m, o, 'post', 't'):+.2f} | {int(ev(m, o, 'post', 'n')):,} |")
+Markdown("| Outcome | post | s.e. | t | rows |\n"
+         "|------------------------------------------------|------:|------:|------:|------:|\n"
+         + "\n".join(rows))
+```
+
+![Huber model, binned event-time coefficients with 95 percent bands, relative to the five years before publication. Left: the model's reliance on the characteristic, as its share of total importance. Middle: the size of its slope. Right: the characteristic's own rank correlation with next month's return.](../output/fig07_decomposition.png){#fig-s1-decomp}
+
+```{python}
+#| label: s1-event-numbers
+#| echo: false
+
+pre_h = ev("huber", "imp_bp", "bin_-10 to -6", "t", "bins")
+post_bins_h = [ev("huber", "imp_bp", b, "t", "bins") for b in ("bin_0 to 4", "bin_5 to 9", "bin_10+")]
+```
+
+The sign is the opposite of the competed-away story, and it holds for the linear model
+only. For the Huber regression, importance rises after publication by
+`{python} f"{ev('huber','imp_bp','post','coef'):.3f}"` units
+(t = `{python} f"{ev('huber','imp_bp','post','t'):.2f}"`), or
+`{python} f"{ev('huber','share','post','coef'):.2f}"` percentage points of the year's
+total (t = `{python} f"{ev('huber','share','post','t'):.2f}"`), and each of the three
+post-publication bins is positive, with t between
+`{python} f"{min(post_bins_h):.1f}"` and `{python} f"{max(post_bins_h):.1f}"`, so the rise
+is spread over the years after publication and no single bin carries it. For the
+trees and the network the post coefficients are positive and not distinguishable from
+zero (t = `{python} f"{ev('gbrt','imp_bp','post','t'):.2f}"` and
+`{python} f"{ev('nn3','imp_bp','post','t'):.2f}"`).
+
+The decomposition says where the Huber rise comes from. The slope the model puts on a
+characteristic grows after publication, weakly: $\log|\beta|$ by
+`{python} f"{ev('huber_beta','log_abs_beta','post','coef'):.3f}"`
+(t = `{python} f"{ev('huber_beta','log_abs_beta','post','t'):.2f}"`), $|\beta|$ by
+`{python} f"{ev('huber_beta','abs_beta_bp','post','coef'):.1f}"` basis points
+(t = `{python} f"{ev('huber_beta','abs_beta_bp','post','t'):.2f}"`). The
+characteristic's own correlation with next month's return does not move:
+`{python} f"{ev('char_ic','char_ic_x100','post','coef'):+.3f}"` on the IC × 100
+(t = `{python} f"{ev('char_ic','char_ic_x100','post','t'):.2f}"`) and
+`{python} f"{ev('char_ic','abs_char_ic_x100','post','coef'):+.3f}"` on its absolute value
+(t = `{python} f"{ev('char_ic','abs_char_ic_x100','post','t'):.2f}"`). What rises after
+publication is how much the model leans on the characteristic, not how well the
+characteristic works out of sample. One mechanism fits: a published characteristic has,
+by construction, a long and strong in-sample record in the training data, and an
+expanding-window regression weights it accordingly; whether the record continues is a
+separate question, and the right panel says it neither improves nor collapses in the
+first ten years.
+
+Two cautions belong with the table. The earliest bin, six to ten years before
+publication, is below the reference for the Huber importance
+(t = `{python} f"{pre_h:.2f}"`), so part of the rise is already under way before the
+paper appears; working papers circulate for years before a journal issue, and the
+publication year in the characteristic list is a late date for the event. And
+publication is staggered, so this is a two-way fixed effects event study, and when the
+effect differs across publication cohorts the binned coefficients mix clean comparisons
+with ones that use already-published characteristics as controls [@goodmanbacon2021;
+@sun2021]. The table is the first pass; the interaction-weighted version is the planned
+check.
+
+## What this section does and does not show
+
+It shows, on the usual stock-level data, how much a forecaster gains from knowing in
+advance which characteristics would be published: a few tenths of a point of
+out-of-sample $R^2$, a few hundredths of rank correlation, and a visible share of the
+Sharpe ratio of every book. It shows that the gross returns of the equal-weighted books
+are paid for in micro and nano caps, and that the choice between a high-low spread
+estimate and the quoted spread decides whether the linear books survive costs at all. And
+it shows that a model refit each year does not lean less on a characteristic after its
+paper appears; the linear model leans more, while the characteristic itself keeps doing
+what it did. It does not show which models are best: the ordering changes with the row
+set, and the Diebold-Mariano statistics among the full-set models are computed on the same
+squared loss whose sums the tails dominate. It does not measure decay in days, which is the
+next stage, and it does not test the cohort-robust version of the event study.
+
 :::
 
 # What the design cannot do, and what comes next {#sec-next}
@@ -1180,8 +1653,15 @@ global factor data would turn the same hypothesis into a cross-country test, and
 - Re-run on the @mclean2016 97 to see whether the weaker channel separation is a
   composition effect.
 - Replace @eq-main with the @callaway2021 and @sun2021 estimators and report how much
-  the estimate moves.
+  the estimate moves[; the same for the event-time regression on importance in
+  @sec-stage1]{.content-visible unless-profile="course"}.
 - Gross profitability as a third rebuilt signal; it needs Compustat and the CCM link.
+
+::: {.content-visible unless-profile="course"}
+- Decay in days: the same public-against-full comparison on daily portfolio returns
+  built from the CRSP daily file, which is the horizon a trading desk means by the word.
+- Sequence models on the stock-level panel, once the daily panel exists.
+:::
 
 # Reproducing this document {#sec-repro}
 
@@ -1193,6 +1673,10 @@ quarto render paper/alpha-decay.qmd --to html
 python 03_crsp_pull.py          # WRDS subscription required
 python 04_build_anomalies.py    # WRDS subscription required
 python 05_ml_panel.py           # the two free files only, about ten minutes
+python 06_jkp_pull.py           # the stock-level panel; WRDS subscription required
+python 09_spreads.py            # closing quoted spreads from the CRSP daily file; WRDS
+python 07_stage1_models.py --robust --crsp-only   # about a day on a laptop
+python 08_stage1_eventtime.py   # the event-time tables and figures
 
 # The version without the machine-learning section:
 quarto render paper/alpha-decay.qmd --profile course
