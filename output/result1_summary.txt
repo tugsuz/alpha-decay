@@ -16,3 +16,6 @@ Panel regression, signal fixed effects, SEs clustered by date:
 
 McLean and Pontiff (2016): about -26% post-sample and -58% post-publication,
 over 97 anomalies. Differences come from universe, sample end, and weighting.
+
+Sun-Abraham, control cohort published 2014 or later, sample to 2013-12:
+  post-publication vs the five years before it: +0.0539 %/month (t = 0.42), 198 treated and 14 control signals
