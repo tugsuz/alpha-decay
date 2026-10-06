@@ -55,17 +55,19 @@ PLS, boosted trees with two losses, networks with one to three layers) is fitted
 on the characteristics whose paper had appeared before the test year, and on all of them,
 which is the usual setup and contains look-ahead. The full set is ahead of the public set
 in every model, every row set and every portfolio: by 0.03 to 0.19 points of out-of-sample
-R² on all rows (about 0.12 on average), by about 0.01 of rank IC, and in the value-weighted
-Huber book by a net Sharpe ratio of 0.70 against 0.36. Costs are half the CRSP closing
-quoted spread, with Corwin-Schultz as the fallback; the two medians differ by a factor of
-ten for mega caps, and the choice decides whether the linear books survive costs. The
-equal-weighted books earn gross Sharpe ratios of up to 3.4 by putting most of their
-trading in micro and nano caps, and net 0.1 to 0.8. In event time around each characteristic's
-publication, the linear model leans more on a characteristic after its paper appears
-(t = 2.4), while the characteristic's own correlation with next month's return does not
-change (t = 0.4); the trees and the network show no detectable change. Two design decisions
-(dropping rows without a CRSP return, and the cost series) were made from diagnostics
-before any model was scored, and the paper says so.
+R² on all rows and by about 0.01 of rank IC. In the value-weighted Huber book the net
+Sharpe ratio is 0.70 against 0.36, and that difference has a Ledoit-Wolf t-statistic of
+2.9; the gap clears t = 2 in every book for the linear models and in none for the trees.
+Costs are half the CRSP closing quoted spread, which exists for 99 percent of test
+stock-months; Corwin-Schultz fills the rest and is reported as a bound, since its mega-cap
+median is ten times the quoted one. The equal-weighted books earn gross Sharpe ratios of
+up to 3.4 by putting most of their trading in micro and nano caps, and net 0.1 to 0.8. In
+event time around each characteristic's publication, no model leans less on a
+characteristic after its paper appears; two of ten post coefficients clear |t| = 2, both
+for the linear model's importance, with a pre-trend in the same direction, so that result
+is a first pass until the Sun-Abraham version is run. Two design decisions (dropping rows
+without a CRSP return, and the cost series) were made from diagnostics before any model
+was scored, and the paper says so.
 
 ![Huber model around publication](output/fig07_decomposition.png)
 
