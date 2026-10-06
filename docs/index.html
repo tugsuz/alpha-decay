@@ -2325,7 +2325,7 @@ window.Quarto = {
 <div>
   <div class="abstract">
     <div class="block-title">Abstract</div>
-    <p>Several hundred cross-sectional return predictors have been published since the 1980s. We measure what happens to them after publication, using the 189 usable signals in the Chen and Zimmermann universe through December 2024. Mean monthly long-short returns fall 45 percent from the original sample window to the post-publication window, and the median signal loses 53 percent. The increment attributable to publication itself, over and above the decline that had already set in when the original sample ended, is not statistically significant, so the design does not separate arbitrage from selection in this universe. We rebuild two of the input series from security-level CRSP data to check the dataset. A real-time forecasting exercise over 1995 to 2024 finds that next month’s return on a published signal is weakly predictable, that no model beats another by a margin a test can distinguish, and that the predictive content sits in the signal’s own return history: the publication clock adds nothing once that history is known. At the stock level, with 153 published characteristics as features, a model given only the characteristics that were public in each test year trails the usual model given all of them in every row set and every portfolio, by a few tenths of a point of out-of-sample R-squared and a visible share of each book’s Sharpe ratio; that gap is the look-ahead in the usual setup. A model refit each year does not lean less on a characteristic after its paper appears. The linear model leans more, while the characteristic’s own correlation with returns does not change.</p>
+    <p>Several hundred cross-sectional return predictors have been published since the 1980s. We measure what happens to them after publication, using the 189 usable signals in the Chen and Zimmermann universe through December 2024. Mean monthly long-short returns fall 45 percent from the original sample window to the post-publication window, and the median signal loses 53 percent. The increment attributable to publication itself, over and above the decline that had already set in when the original sample ended, is not statistically significant, so the design does not separate arbitrage from selection in this universe. We rebuild two of the input series from security-level CRSP data to check the dataset. A real-time forecasting exercise over 1995 to 2024 finds that next month’s return on a published signal is weakly predictable, that no model beats another by a margin a test can distinguish, and that the predictive content sits in the signal’s own return history: the publication clock adds nothing once that history is known. At the stock level, with 153 published characteristics as features, a model given only the characteristics that were public in each test year trails the usual model given all of them in every row set and every portfolio, by a few tenths of a point of out-of-sample R-squared; for the linear models the gap in net Sharpe ratio, about a third of a unit, survives a Ledoit-Wolf test in every book. That gap is the look-ahead in the usual setup. In event time around publication, a model refit each year does not lean less on a characteristic after its paper appears; the one estimate that clears conventional significance comes with a pre-trend and is reported as a first pass.</p>
   </div>
 </div>
 
@@ -2395,7 +2395,7 @@ window.Quarto = {
 <p>The same logic applies to signals found by machine learning. A model fitted to past returns is a published signal in everything but the journal. Once enough capital trades the same features through similar models, the return the model predicts is competed away in the same way. Published anomalies have one advantage as a laboratory: the date on which each became common knowledge is known, so the decay can be measured against it.</p>
 <p>What is known. <span class="citation" data-cites="mclean2016">McLean and Pontiff (<a href="#ref-mclean2016" role="doc-biblioref">2016</a>)</span> find, on 97 anomalies, that long-short returns are 26 percent lower after the original sample ends and 58 percent lower after publication, and they read the gap between those two numbers as the effect of publication itself. <span class="citation" data-cites="chen2023">Chen and Velikov (<a href="#ref-chen2023" role="doc-biblioref">2023</a>)</span> add trading costs and find that the average published anomaly earns about four basis points a month net after 2000. <span class="citation" data-cites="jacobs2020">Jacobs and Müller (<a href="#ref-jacobs2020" role="doc-biblioref">2020</a>)</span> find a reliable post-publication decline only in the United States. <span class="citation" data-cites="falck2022">Falck, Rej, and Thesmar (<a href="#ref-falck2022" role="doc-biblioref">2022</a>)</span> find that the year of publication alone explains a large share of how much a strategy’s Sharpe ratio falls out of sample.</p>
 <p>What this paper does. We re-measure post-publication decay on the <span class="citation" data-cites="chen2022">Chen and Zimmermann (<a href="#ref-chen2022" role="doc-biblioref">2022</a>)</span> universe, which covers 212 predictors through December 2024, about twice the McLean and Pontiff sample and a decade more data. Mean long-short returns fall 45 percent from the original sample window to the post-publication window, and the median signal loses 53 percent. We then test the restriction that separates the two explanations of the decline, arbitrage after publication and selection in the original sample, and we fail to reject it: the three-window design does not identify the channel in this universe. We rebuild two of the input series from security-level CRSP data as a check on the dataset everything else rests on.</p>
-<p>Finally we ask whether a forecaster standing in real time, knowing only the signals that had been published by then, could have picked the ones that would keep paying. The answer is modest. A linear regression and gradient boosted trees each earn an out-of-sample R² below one percent, no model beats another by a margin a test can distinguish, and almost all of the predictive content sits in the signal’s own return history. Holding every published signal with equal weight earns a higher Sharpe ratio than any model-based selection. We then move the same question to individual stocks, with 153 published characteristics as features, and fit every model twice: once on the characteristics that were public in each test year and once on all of them. The second set, which is the usual one and contains look-ahead, is ahead of the first in every model, every row set and every portfolio, by a few tenths of a point of out-of-sample R² and a visible share of each book’s Sharpe ratio. A model refit each year does not lean less on a characteristic after its paper appears; the linear model leans more, while the characteristic’s own correlation with returns does not change.</p>
+<p>Finally we ask whether a forecaster standing in real time, knowing only the signals that had been published by then, could have picked the ones that would keep paying. The answer is modest. A linear regression and gradient boosted trees each earn an out-of-sample R² below one percent, no model beats another by a margin a test can distinguish, and almost all of the predictive content sits in the signal’s own return history. Holding every published signal with equal weight earns a higher Sharpe ratio than any model-based selection. We then move the same question to individual stocks, with 153 published characteristics as features, and fit every model twice: once on the characteristics that were public in each test year and once on all of them. The second set, which is the usual one and contains look-ahead, is ahead of the first in every model, every row set and every portfolio, by a few tenths of a point of out-of-sample R², and for the linear models the gap in net Sharpe ratio, about a third of a unit, survives a Ledoit-Wolf test in every book. In event time around each characteristic’s publication the model does not lean less on it afterwards; the one estimate that clears conventional significance, for the linear model, comes with a pre-trend, so it is reported as a first pass.</p>
 <p><a href="#sec-data" class="quarto-xref">Section 2</a> describes the data, <a href="#sec-design" class="quarto-xref">Section 3</a> the design and the estimator, <a href="#sec-result1" class="quarto-xref">Section 4</a> the results and the restriction test, <a href="#sec-rebuild" class="quarto-xref">Section 5</a> the CRSP rebuild<span>, <a href="#sec-ml" class="quarto-xref">Section 6</a> the forecasting exercise on the anomaly panel and <a href="#sec-stage1" class="quarto-xref">Section 7</a> the stock-level one</span>. <a href="#sec-next" class="quarto-xref">Section 8</a> sets out what the design cannot do and what comes next.</p>
 </section>
 <section id="sec-data" class="level1" data-number="2">
@@ -3834,12 +3834,12 @@ Table 10: Rank IC: the monthly Spearman correlation between forecast and realis
 <section id="portfolios-and-the-cost-of-trading-them" class="level2" data-number="7.4">
 <h2 data-number="7.4" class="anchored" data-anchor-id="portfolios-and-the-cost-of-trading-them"><span class="header-section-number">7.4</span> Portfolios and the cost of trading them</h2>
 <p>Each month the stocks are sorted into deciles on the forecast, the top decile is held long and the bottom decile short, equal- or value-weighted, with and without the micro and nano groups. Turnover is half the sum of absolute weight changes, and each traded dollar is charged half a spread.</p>
-<p>The second decision is which spread. The first pass charged half of the <span class="citation" data-cites="corwin2012">Corwin and Schultz (<a href="#ref-corwin2012" role="doc-biblioref">2012</a>)</span> estimate that comes with the panel, averaged over 21 days. The traded-weighted spread it implied in a value-weighted book was about one percent, which is too high after 2001 for stocks above the NYSE 20th size percentile, and the estimate is noisy and floored at zero, which pushes its mean up. So the costs here use the month’s mean closing quoted spread from the CRSP daily file, <span class="math inline">\((\text{ask} - \text{bid}) / \text{midpoint}\)</span> on days with a positive quote, which <span class="citation" data-cites="chung2014">Chung and Zhang (<a href="#ref-chung2014" role="doc-biblioref">2014</a>)</span> show tracks TAQ effective spreads closely; for liquid stocks it is an upper bound, since trades print inside the quote. The Corwin-Schultz estimate is the fallback where no quote exists, and the <span class="citation" data-cites="abdi2017">Abdi and Ranaldo (<a href="#ref-abdi2017" role="doc-biblioref">2017</a>)</span> estimate from daily high, low and close is a third reading that needs no quotes. The quoted spread prices at least 94 percent of traded weight in every book, and both cost series are reported.</p>
+<p>The second decision is which spread. The first pass charged half of the <span class="citation" data-cites="corwin2012">Corwin and Schultz (<a href="#ref-corwin2012" role="doc-biblioref">2012</a>)</span> estimate that comes with the panel, averaged over 21 days. The traded-weighted spread it implied in a value-weighted book was about one percent, which is too high after 2001 for stocks above the NYSE 20th size percentile, and the estimate is noisy and floored at zero, which pushes its mean up. The cost measure in this section is therefore the month’s mean closing quoted spread from the CRSP daily file, <span class="math inline">\((\text{ask} - \text{bid}) / \text{midpoint}\)</span> on days with a positive quote, which <span class="citation" data-cites="chung2014">Chung and Zhang (<a href="#ref-chung2014" role="doc-biblioref">2014</a>)</span> show tracks TAQ effective spreads closely; for liquid stocks it is itself an upper bound, since trades print inside the quote. A quoted spread exists for 99.1 percent of the test stock-months (between 98.7 and 99.2 percent across the size groups) and prices at least 94 percent of traded weight in every book; the Corwin-Schultz estimate fills the gap. Corwin-Schultz is also reported as a bound: for every size group outside nano it is above the quoted spread, by a factor of about ten at the mega-cap median, so the net Sharpe ratio under it is a conservative reading for a value-weighted book. In the nano group it is below the quoted spread, so it is not a bound there. The <span class="citation" data-cites="abdi2017">Abdi and Ranaldo (<a href="#ref-abdi2017" role="doc-biblioref">2017</a>)</span> estimate from daily high, low and close is a third reading that needs no quotes.</p>
 <div class="cell" data-execution_count="36">
 <div id="tbl-s1-spreads" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="36">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-s1-spreads-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table 11: Full spreads over the test rows, by size group, in percent. Medians of the Corwin-Schultz estimate, the CRSP closing quoted spread and the Abdi-Ranaldo estimate; then, for the value-weighted Huber book on all rows, each group’s share of traded weight and the traded-weighted spread on the two cost series.
+Table 11: Full spreads over the test rows, by size group, in percent. Medians of the CRSP closing quoted spread (the cost measure), the Corwin-Schultz estimate (the bound) and the Abdi-Ranaldo estimate; then, for the value-weighted Huber book on all rows, each group’s share of traded weight and the traded-weighted spread on the two series.
 </figcaption>
 <div aria-describedby="tbl-s1-spreads-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div class="cell-output cell-output-display cell-output-markdown">
@@ -3856,19 +3856,19 @@ Table 11: Full spreads over the test rows, by size group, in percent. Medians o
 <thead>
 <tr class="header">
 <th>Size group</th>
-<th style="text-align: right;">Corwin-Schultz, median</th>
 <th style="text-align: right;">quoted, median</th>
+<th style="text-align: right;">Corwin-Schultz, median</th>
 <th style="text-align: right;">Abdi-Ranaldo, median</th>
 <th style="text-align: right;">share of traded weight</th>
-<th style="text-align: right;">traded-weighted spread, used</th>
+<th style="text-align: right;">traded-weighted spread, quoted</th>
 <th style="text-align: right;">traded-weighted spread, Corwin-Schultz</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td>mega</td>
-<td style="text-align: right;">0.55</td>
 <td style="text-align: right;">0.05</td>
+<td style="text-align: right;">0.55</td>
 <td style="text-align: right;">0.24</td>
 <td style="text-align: right;">60.9</td>
 <td style="text-align: right;">0.24</td>
@@ -3876,8 +3876,8 @@ Table 11: Full spreads over the test rows, by size group, in percent. Medians o
 </tr>
 <tr class="even">
 <td>large</td>
-<td style="text-align: right;">0.66</td>
 <td style="text-align: right;">0.09</td>
+<td style="text-align: right;">0.66</td>
 <td style="text-align: right;">0.24</td>
 <td style="text-align: right;">21.1</td>
 <td style="text-align: right;">0.42</td>
@@ -3885,8 +3885,8 @@ Table 11: Full spreads over the test rows, by size group, in percent. Medians o
 </tr>
 <tr class="odd">
 <td>small</td>
-<td style="text-align: right;">0.89</td>
 <td style="text-align: right;">0.20</td>
+<td style="text-align: right;">0.89</td>
 <td style="text-align: right;">0.49</td>
 <td style="text-align: right;">11.6</td>
 <td style="text-align: right;">0.68</td>
@@ -3894,8 +3894,8 @@ Table 11: Full spreads over the test rows, by size group, in percent. Medians o
 </tr>
 <tr class="even">
 <td>micro</td>
-<td style="text-align: right;">1.40</td>
 <td style="text-align: right;">1.30</td>
+<td style="text-align: right;">1.40</td>
 <td style="text-align: right;">1.30</td>
 <td style="text-align: right;">5.7</td>
 <td style="text-align: right;">1.68</td>
@@ -3903,8 +3903,8 @@ Table 11: Full spreads over the test rows, by size group, in percent. Medians o
 </tr>
 <tr class="odd">
 <td>nano</td>
-<td style="text-align: right;">2.61</td>
 <td style="text-align: right;">3.74</td>
+<td style="text-align: right;">2.61</td>
 <td style="text-align: right;">2.91</td>
 <td style="text-align: right;">0.3</td>
 <td style="text-align: right;">4.90</td>
@@ -3917,12 +3917,12 @@ Table 11: Full spreads over the test rows, by size group, in percent. Medians o
 </figure>
 </div>
 </div>
-<p><a href="#tbl-s1-spreads" class="quarto-xref">Table 11</a> is why the choice matters. For mega and large caps the quoted spread median is 0.05 and 0.09 percent against Corwin-Schultz medians of 0.55 and 0.66; the two agree in the micro group and reverse in the nano group, where the quoted spread is wider. A value-weighted book puts 61 percent of its trading in mega caps, so the series used charges it 0.24 percent there against 0.70 on Corwin-Schultz. The traded-weighted spreads sit above the panel medians within every group, as they should when the extreme deciles hold the less liquid stocks of each group and the spread distribution is skewed.</p>
+<p><a href="#tbl-s1-spreads" class="quarto-xref">Table 11</a> is why the choice matters. For mega and large caps the quoted spread median is 0.05 and 0.09 percent against Corwin-Schultz medians of 0.55 and 0.66; the two agree in the micro group and reverse in the nano group, where the quoted spread is wider. A value-weighted book puts 61 percent of its trading in mega caps, where the quoted spread charges it 0.24 percent and Corwin-Schultz would charge 0.70. The traded-weighted spreads sit above the panel medians within every group, as they should when the extreme deciles hold the less liquid stocks of each group and the spread distribution is skewed.</p>
 <div class="cell" data-execution_count="37">
 <div id="tbl-s1-port" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="37">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-s1-port-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table 12: Decile long-short portfolios, value-weighted, test years pooled. Gross mean in percent a month; Sharpe ratios annualised; turnover in units of the long-short position a month; cost in percent a month on the quoted-spread series; net Sharpe on that series and on Corwin-Schultz alone.
+Table 12: Decile long-short portfolios, value-weighted, test years pooled. Gross mean in percent a month; Sharpe ratios annualised; turnover in units of the long-short position a month; cost in percent a month at half the quoted spread; net Sharpe at that cost. The last two columns repeat the cost and the net Sharpe with Corwin-Schultz in place of the quoted spread, as a bound.
 </figcaption>
 <div aria-describedby="tbl-s1-port-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div class="cell-output cell-output-display cell-output-markdown">
@@ -3943,10 +3943,10 @@ Table 12: Decile long-short portfolios, value-weighted, test years pooled. Gros
 <th style="text-align: right;">gross mean</th>
 <th style="text-align: right;">gross Sharpe</th>
 <th style="text-align: right;">turnover</th>
-<th style="text-align: right;">cost, quoted</th>
-<th style="text-align: right;">net Sharpe, quoted</th>
-<th style="text-align: right;">cost, Corwin-Schultz</th>
-<th style="text-align: right;">net Sharpe, Corwin-Schultz</th>
+<th style="text-align: right;">cost</th>
+<th style="text-align: right;">net Sharpe</th>
+<th style="text-align: right;">cost, CS bound</th>
+<th style="text-align: right;">net Sharpe, CS bound</th>
 </tr>
 </thead>
 <tbody>
@@ -4337,8 +4337,149 @@ Table 12: Decile long-short portfolios, value-weighted, test years pooled. Gros
 </figure>
 </div>
 </div>
-<p>Three things in <a href="#tbl-s1-port" class="quarto-xref">Table 12</a>. Gross, the value-weighted books earn between 1.34 and 3.42 percent a month on the full set, the networks at the top. Net of the quoted spread the best is the network, 2 layers, full set, with an annualised Sharpe ratio of 1.09; the Huber regression nets 0.70. On Corwin-Schultz costs the same two books net 0.76 and 0.29, and several of the public-set linear books net nothing. Which spread one believes decides whether the linear models survive costs; it does not change the ordering.</p>
-<p>The public set is below the full set in every book, gross and net. For the Huber regression on all stocks the gross mean falls from 1.76 to 1.29 percent a month and the net Sharpe ratio from 0.70 to 0.36; for the two-layer network from 1.09 to 0.80. A backtest that uses every characteristic over the whole sample overstates what was available at the time by these amounts.</p>
+<p>Three things in <a href="#tbl-s1-port" class="quarto-xref">Table 12</a>. Gross, the value-weighted books earn between 1.34 and 3.42 percent a month on the full set, the networks at the top. Net of costs the best is the network, 2 layers, full set, with an annualised Sharpe ratio of 1.09; the Huber regression nets 0.70. Under the Corwin-Schultz bound the same two books net 0.76 and 0.29, and several of the public-set linear books net nothing; the bound does not change the ordering.</p>
+<p>The public set is below the full set in every book, gross and net. Whether the gap is more than noise is a question about the monthly difference between the two long-short returns, and <a href="#tbl-s1-fullpub" class="quarto-xref">Table 13</a> tests it two ways: the mean of the monthly difference in gross returns with a Newey-West <span class="math inline">\(t\)</span>-statistic at twelve lags, and the difference in net Sharpe ratios with the <span class="citation" data-cites="ledoit2008">Ledoit and Wolf (<a href="#ref-ledoit2008" role="doc-biblioref">2008</a>)</span> test, which applies the delta method to the two means and two second moments under the same Newey-West covariance.</p>
+<div class="cell" data-execution_count="39">
+<div id="tbl-s1-fullpub" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="39">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-s1-fullpub-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table 13: Full minus public, by book. Mean monthly difference in gross long-short return, in percentage points, with a Newey-West t-statistic; and the difference in annualised net Sharpe ratios with the Ledoit-Wolf t-statistic.
+</figcaption>
+<div aria-describedby="tbl-s1-fullpub-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display cell-output-markdown">
+<table class="do-not-create-environment cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 30%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 8%">
+<col style="width: 8%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th style="text-align: right;">VW all: mean diff.</th>
+<th style="text-align: right;">VW all: Sharpe diff.</th>
+<th style="text-align: right;">VW ex micro and nano: mean diff.</th>
+<th style="text-align: right;">VW ex micro and nano: Sharpe diff.</th>
+<th style="text-align: right;">EW all: mean diff.</th>
+<th style="text-align: right;">EW all: Sharpe diff.</th>
+<th style="text-align: right;">EW ex micro and nano: mean diff.</th>
+<th style="text-align: right;">EW ex micro and nano: Sharpe diff.</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Huber regression</td>
+<td style="text-align: right;">+0.47 (2.5)</td>
+<td style="text-align: right;">+0.34 (2.9)</td>
+<td style="text-align: right;">+0.38 (2.3)</td>
+<td style="text-align: right;">+0.30 (2.5)</td>
+<td style="text-align: right;">+0.58 (2.9)</td>
+<td style="text-align: right;">+0.41 (3.8)</td>
+<td style="text-align: right;">+0.43 (2.5)</td>
+<td style="text-align: right;">+0.31 (3.4)</td>
+</tr>
+<tr class="even">
+<td>elastic net</td>
+<td style="text-align: right;">+0.61 (2.7)</td>
+<td style="text-align: right;">+0.40 (3.1)</td>
+<td style="text-align: right;">+0.40 (2.2)</td>
+<td style="text-align: right;">+0.27 (2.5)</td>
+<td style="text-align: right;">+0.69 (3.1)</td>
+<td style="text-align: right;">+0.42 (3.8)</td>
+<td style="text-align: right;">+0.45 (2.5)</td>
+<td style="text-align: right;">+0.27 (3.1)</td>
+</tr>
+<tr class="odd">
+<td>principal components</td>
+<td style="text-align: right;">+0.41 (1.6)</td>
+<td style="text-align: right;">+0.23 (1.8)</td>
+<td style="text-align: right;">+0.31 (1.4)</td>
+<td style="text-align: right;">+0.17 (1.5)</td>
+<td style="text-align: right;">+0.29 (1.9)</td>
+<td style="text-align: right;">+0.21 (2.9)</td>
+<td style="text-align: right;">+0.31 (2.2)</td>
+<td style="text-align: right;">+0.16 (2.3)</td>
+</tr>
+<tr class="even">
+<td>partial least squares</td>
+<td style="text-align: right;">+0.54 (2.5)</td>
+<td style="text-align: right;">+0.32 (2.7)</td>
+<td style="text-align: right;">+0.65 (3.5)</td>
+<td style="text-align: right;">+0.41 (3.9)</td>
+<td style="text-align: right;">+0.57 (2.8)</td>
+<td style="text-align: right;">+0.34 (3.2)</td>
+<td style="text-align: right;">+0.50 (2.8)</td>
+<td style="text-align: right;">+0.30 (3.4)</td>
+</tr>
+<tr class="odd">
+<td>boosted trees, squared loss</td>
+<td style="text-align: right;">+0.09 (0.6)</td>
+<td style="text-align: right;">+0.06 (0.7)</td>
+<td style="text-align: right;">+0.22 (0.9)</td>
+<td style="text-align: right;">+0.12 (0.9)</td>
+<td style="text-align: right;">+0.26 (2.0)</td>
+<td style="text-align: right;">+0.10 (1.3)</td>
+<td style="text-align: right;">+0.16 (1.1)</td>
+<td style="text-align: right;">+0.06 (0.8)</td>
+</tr>
+<tr class="even">
+<td>boosted trees, Huber loss</td>
+<td style="text-align: right;">+0.06 (0.4)</td>
+<td style="text-align: right;">-0.02 (-0.3)</td>
+<td style="text-align: right;">+0.21 (1.0)</td>
+<td style="text-align: right;">+0.05 (0.5)</td>
+<td style="text-align: right;">+0.12 (1.0)</td>
+<td style="text-align: right;">+0.07 (1.8)</td>
+<td style="text-align: right;">+0.18 (1.4)</td>
+<td style="text-align: right;">+0.04 (0.9)</td>
+</tr>
+<tr class="odd">
+<td>network, 1 layer</td>
+<td style="text-align: right;">+0.81 (2.6)</td>
+<td style="text-align: right;">+0.34 (2.4)</td>
+<td style="text-align: right;">+0.45 (2.1)</td>
+<td style="text-align: right;">+0.28 (2.4)</td>
+<td style="text-align: right;">+0.69 (3.3)</td>
+<td style="text-align: right;">+0.42 (3.6)</td>
+<td style="text-align: right;">+0.40 (2.2)</td>
+<td style="text-align: right;">+0.24 (2.7)</td>
+</tr>
+<tr class="even">
+<td>network, 2 layers</td>
+<td style="text-align: right;">+0.60 (1.6)</td>
+<td style="text-align: right;">+0.29 (1.5)</td>
+<td style="text-align: right;">+0.30 (1.4)</td>
+<td style="text-align: right;">+0.16 (1.3)</td>
+<td style="text-align: right;">+0.65 (3.1)</td>
+<td style="text-align: right;">+0.42 (3.1)</td>
+<td style="text-align: right;">+0.40 (2.7)</td>
+<td style="text-align: right;">+0.25 (2.8)</td>
+</tr>
+<tr class="odd">
+<td>network, 3 layers</td>
+<td style="text-align: right;">+0.79 (2.3)</td>
+<td style="text-align: right;">+0.35 (2.3)</td>
+<td style="text-align: right;">+0.31 (1.6)</td>
+<td style="text-align: right;">+0.14 (1.4)</td>
+<td style="text-align: right;">+0.61 (2.9)</td>
+<td style="text-align: right;">+0.36 (3.0)</td>
+<td style="text-align: right;">+0.34 (2.2)</td>
+<td style="text-align: right;">+0.21 (2.7)</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>The gap survives the test for the linear models and not for the trees. For the value-weighted Huber book on all stocks the full set earns 0.47 percentage points a month more than the public set (t = 2.5), and its net Sharpe ratio is higher by 0.34 (Ledoit-Wolf t = 2.9), which is the difference between 0.70 and 0.36 in <a href="#tbl-s1-port" class="quarto-xref">Table 12</a>. The Sharpe difference clears t = 2 in all four books for Huber regression; elastic net; partial least squares; network, 1 layer; in none of the four for boosted trees, squared loss; boosted trees, Huber loss; and in some books for principal components; network, 2 layers; network, 3 layers. Over the 36 model-book pairs, 23 Sharpe differences and 23 mean differences clear t = 2. For the linear models, then, a backtest that uses every characteristic over the whole sample overstates the net Sharpe ratio that was available at the time by about a third of a unit, and the overstatement is not noise. For the trees the two sets are indistinguishable.</p>
 <p>The equal-weighted books, in <code>output/stage1_portfolio_summary.csv</code>, are the ones that look spectacular and are not. Gross they earn Sharpe ratios of 1.1 to 3.4 on the full set, because they put between 61 and 82 percent of their trading in micro and nano caps. They pay 2.2 to 3.7 percent a month for it on the quoted spread and net between 0.09 and 0.77. The value-weighted books and the books without micro and nano caps are the ones an allocator could hold.</p>
 </section>
 <section id="what-the-model-uses-in-event-time-around-publication" class="level2" data-number="7.5">
@@ -4350,11 +4491,11 @@ Table 12: Decile long-short portfolios, value-weighted, test years pooled. Gros
 \]</span></p>
 <p>Characteristic effects <span class="math inline">\(a_c\)</span> absorb how useful a characteristic is on average, year effects <span class="math inline">\(d_y\)</span> absorb anything that moves every importance in a year, and <span class="math inline">\(b\)</span> is identified from the 132 characteristics whose publication year falls inside the test window. Importance enters in units of mean squared error scaled by <span class="math inline">\(10^4\)</span> and as a share of the year’s total positive importance. A second specification replaces post with event-time bins, the five years before publication being the reference. Standard errors are clustered by characteristic and by year. The two-way covariance of <span class="citation" data-cites="cameron2011">Cameron, Gelbach, and Miller (<a href="#ref-cameron2011" role="doc-biblioref">2011</a>)</span> is not positive semi-definite in general, and here it was not: one bin coefficient came out with a negative variance. The matrix is made semi-definite by setting its negative eigenvalues to zero, as <span class="citation" data-cites="cameron2011">Cameron, Gelbach, and Miller (<a href="#ref-cameron2011" role="doc-biblioref">2011</a>)</span> suggest, and the standard errors reported are the ones after that step, which widens them.</p>
 <p>Permutation importance in a linear model is about <span class="math inline">\(2\beta\,\mathrm{Cov}(y - \text{rest}, x)\)</span> on the test rows. It rises when the model leans harder on the characteristic and when the characteristic still covaries with the return out of sample, and the two can be separated. The same design is run on two more outcomes saved beside the forecasts: the Huber regression’s slope on each characteristic, and the characteristic’s own monthly Spearman correlation with the realised return over the test year.</p>
-<div class="cell" data-execution_count="39">
-<div id="tbl-s1-event" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="39">
+<div class="cell" data-execution_count="41">
+<div id="tbl-s1-event" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="41">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-s1-event-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table 13: Two-way fixed effects estimates of post. Standard errors clustered by characteristic and by year, after the positive semi-definite correction. Importance in mean squared error × 10,000 and as a share of the year’s total, in percentage points; the Huber slope in log absolute value and in basis points; the characteristic’s own IC × 100 and its absolute value × 100.
+Table 14: Two-way fixed effects estimates of post. Standard errors clustered by characteristic and by year, after the positive semi-definite correction. Importance in mean squared error × 10,000 and as a share of the year’s total, in percentage points; the Huber slope in log absolute value and in basis points; the characteristic’s own IC × 100 and its absolute value × 100.
 </figcaption>
 <div aria-describedby="tbl-s1-event-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div class="cell-output cell-output-display cell-output-markdown">
@@ -4463,13 +4604,13 @@ Figure 7: Huber model, binned event-time coefficients with 95 percent bands, re
 </figcaption>
 </figure>
 </div>
-<p>The sign is the opposite of the competed-away story, and it holds for the linear model only. For the Huber regression, importance rises after publication by 0.035 units (t = 2.41), or 0.14 percentage points of the year’s total (t = 2.01), and each of the three post-publication bins is positive, with t between 1.4 and 1.6, so the rise is spread over the years after publication and no single bin carries it. For the trees and the network the post coefficients are positive and not distinguishable from zero (t = 1.04 and 1.14).</p>
-<p>The decomposition says where the Huber rise comes from. The slope the model puts on a characteristic grows after publication, weakly: <span class="math inline">\(\log|\beta|\)</span> by 0.075 (t = 0.81), <span class="math inline">\(|\beta|\)</span> by 2.4 basis points (t = 1.65). The characteristic’s own correlation with next month’s return does not move: +0.092 on the IC × 100 (t = 0.37) and -0.004 on its absolute value (t = -0.03). What rises after publication is how much the model leans on the characteristic, not how well the characteristic works out of sample. One mechanism fits: a published characteristic has, by construction, a long and strong in-sample record in the training data, and an expanding-window regression weights it accordingly; whether the record continues is a separate question, and the right panel says it neither improves nor collapses in the first ten years.</p>
-<p>Two cautions belong with the table. The earliest bin, six to ten years before publication, is below the reference for the Huber importance (t = -1.91), so part of the rise is already under way before the paper appears; working papers circulate for years before a journal issue, and the publication year in the characteristic list is a late date for the event. And publication is staggered, so this is a two-way fixed effects event study, and when the effect differs across publication cohorts the binned coefficients mix clean comparisons with ones that use already-published characteristics as controls <span class="citation" data-cites="goodmanbacon2021 sun2021">(<a href="#ref-goodmanbacon2021" role="doc-biblioref">Goodman-Bacon 2021</a>; <a href="#ref-sun2021" role="doc-biblioref">Sun and Abraham 2021</a>)</span>. The table is the first pass; the interaction-weighted version is the planned check.</p>
+<p>What the table shows, counted. There are 10 model-outcome pairs in the post specification and 40 binned coefficients. Of the post coefficients, 2 have |t| above 2, the Huber importance in error units, the Huber importance share; of the binned coefficients, 0 do. Every post coefficient on importance is positive, which is the opposite sign from the competed-away story, but only the Huber ones are distinguishable from zero, at t = 2.41 in error units and t = 2.01 as a share of the year’s total; the trees and the network sit at t = 1.04 and 1.14. With this many outcomes looked at, two coefficients near t = 2 are what a search of this size turns up on its own, and the paper does not claim more.</p>
+<p>The decomposition rows say that, if there is a Huber effect, it sits in the model and not in the characteristic: the slope grows weakly after publication (<span class="math inline">\(\log|\beta|\)</span> by 0.075, t = 0.81; <span class="math inline">\(|\beta|\)</span> by 2.4 basis points, t = 1.65), and the characteristic’s own correlation with next month’s return does not move (+0.092 on the IC × 100, t = 0.37; -0.004 on its absolute value, t = -0.03). A published characteristic has, by construction, a long in-sample record in the training data, and an expanding-window regression weights it accordingly, which would produce this pattern without any change in the characteristic itself.</p>
+<p>The post coefficient cannot yet be read as a publication effect, for two reasons. The earliest bin, six to ten years before publication, is below the reference for the Huber importance (t = -1.91), so the rise is already under way before the paper appears; working papers circulate for years before a journal issue, and the publication year in the characteristic list is a late date for the event. And publication is staggered, so this is a two-way fixed effects event study, and when the effect differs across publication cohorts the binned coefficients mix clean comparisons with ones that use already-published characteristics as controls <span class="citation" data-cites="goodmanbacon2021 sun2021">(<a href="#ref-goodmanbacon2021" role="doc-biblioref">Goodman-Bacon 2021</a>; <a href="#ref-sun2021" role="doc-biblioref">Sun and Abraham 2021</a>)</span>. The <span class="citation" data-cites="sun2021">Sun and Abraham (<a href="#ref-sun2021" role="doc-biblioref">2021</a>)</span> interaction-weighted version is the next step, and no claim about publication and model reliance is made until it is in.</p>
 </section>
 <section id="what-this-section-does-and-does-not-show-1" class="level2" data-number="7.6">
 <h2 data-number="7.6" class="anchored" data-anchor-id="what-this-section-does-and-does-not-show-1"><span class="header-section-number">7.6</span> What this section does and does not show</h2>
-<p>It shows, on the usual stock-level data, how much a forecaster gains from knowing in advance which characteristics would be published: a few tenths of a point of out-of-sample <span class="math inline">\(R^2\)</span>, a few hundredths of rank correlation, and a visible share of the Sharpe ratio of every book. It shows that the gross returns of the equal-weighted books are paid for in micro and nano caps, and that the choice between a high-low spread estimate and the quoted spread decides whether the linear books survive costs at all. And it shows that a model refit each year does not lean less on a characteristic after its paper appears; the linear model leans more, while the characteristic itself keeps doing what it did. It does not show which models are best: the ordering changes with the row set, and the Diebold-Mariano statistics among the full-set models are computed on the same squared loss whose sums the tails dominate. It does not measure decay in days, which is the next stage, and it does not test the cohort-robust version of the event study.</p>
+<p>It shows, on the usual stock-level data, how much a forecaster gains from knowing in advance which characteristics would be published: a few tenths of a point of out-of-sample <span class="math inline">\(R^2\)</span>, a few hundredths of rank correlation, and a visible share of the Sharpe ratio of every book. For the linear models the gap in net Sharpe ratio survives a Ledoit-Wolf test in every book; for the trees it does not. It shows that the gross returns of the equal-weighted books are paid for in micro and nano caps, and that the quoted spread and the Corwin-Schultz bound give different answers on whether the public-set linear books survive costs. It does not show that publication changes what a model uses: two of ten post coefficients clear |t| = 2, both for the Huber importance, with a pre-trend in the same direction, and the cohort-robust version has not been run. It does not show which models are best: the ordering changes with the row set, and the Diebold-Mariano statistics among the full-set models are computed on the same squared loss whose sums the tails dominate. It does not measure decay in days, which is the next stage.</p>
 </section>
 </section>
 <section id="sec-next" class="level1" data-number="8">
@@ -4527,7 +4668,7 @@ r_t = \alpha_t + \varepsilon_t, \qquad
 <span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="co"># The version without the machine-learning section:</span></span>
 <span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a><span class="ex">quarto</span> render paper/alpha-decay.qmd <span class="at">--profile</span> course</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<div id="verify" class="cell" data-execution_count="41">
+<div id="verify" class="cell" data-execution_count="43">
 <details class="code-fold">
 <summary>code</summary>
 <div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># The three-window means recomputed here must match the ones 02_decay_panel.py wrote.</span></span>
@@ -4615,6 +4756,9 @@ Jensen, Theis Ingerslev, Bryan Kelly, and Lasse Heje Pedersen. 2023. <span>“Is
 </div>
 <div id="ref-ke2017" class="csl-entry" role="listitem">
 Ke, Guolin, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei Ye, and Tie-Yan Liu. 2017. <span>“<span>LightGBM</span>: A Highly Efficient Gradient Boosting Decision Tree.”</span> <em>Advances in Neural Information Processing Systems</em> 30: 3146–54.
+</div>
+<div id="ref-ledoit2008" class="csl-entry" role="listitem">
+Ledoit, Oliver, and Michael Wolf. 2008. <span>“Robust Performance Hypothesis Testing with the Sharpe Ratio.”</span> <em>Journal of Empirical Finance</em> 15 (5): 850–59.
 </div>
 <div id="ref-lovell1963" class="csl-entry" role="listitem">
 Lovell, Michael C. 1963. <span>“Seasonal Adjustment of Economic Time Series and Multiple Regression Analysis.”</span> <em>Journal of the American Statistical Association</em> 58 (304): 993–1010.
