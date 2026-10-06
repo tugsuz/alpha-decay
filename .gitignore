@@ -15,6 +15,8 @@ output/*
 !output/fig02_decay.png
 !output/result1_summary.txt
 !output/result1_windows.csv
+!output/result1_sunabraham.csv
+!output/fig02_sunabraham.png
 !output/fig04_rebuild.png
 !output/rebuild_summary.txt
 !output/rebuild_Size.csv
@@ -47,6 +49,8 @@ output/*
 !output/stage1_huber_coef.csv
 !output/stage1_char_ic.csv
 !output/stage1_eventtime.csv
+!output/stage1_sunabraham.csv
+!output/fig07_sunabraham.png
 !output/fig07_eventtime.png
 !output/fig07_decomposition.png
 !output/fig07_r2_by_year.png

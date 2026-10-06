@@ -7,6 +7,9 @@ STEP 8 -- what the model uses, in event time around each characteristic's public
 Reads   output/stage1_importance.csv   (07_stage1_models.py) and jkp_characteristics.csv,
         output/stage1_r2.csv and output/stage1_portfolio_summary.csv for the figures.
 Writes  output/stage1_eventtime.csv      the fixed-effects estimates
+        output/stage1_sunabraham.csv     the same outcomes with the Sun-Abraham estimator, and
+                                         the two-way FE bins and post dummy on its sample
+        output/fig07_sunabraham.png       Huber importance share: two-way FE bins against Sun-Abraham
         output/fig07_eventtime.png        importance against years since publication
         output/fig07_decomposition.png    Huber model: importance share, |slope|, the characteristic's own IC
         output/fig07_r2_by_year.png       public and full R2 by test year
@@ -24,10 +27,10 @@ Characteristic fixed effects a_c absorb how useful a characteristic is on averag
 fixed effects d_y absorb anything that moves all importances in a year, including the
 calendar-time decline the paper worries about. b is identified from the characteristics
 whose publication falls inside the test window. Standard errors are clustered two ways,
-by characteristic and by year; the two-way matrix is made positive semi-definite by
-setting its negative eigenvalues to zero (Cameron, Gelbach and Miller 2011), and the
-output records how many were set. A second specification replaces post with event-time
-bins, the five years before publication being the reference.
+by characteristic and by year (Cameron, Gelbach and Miller 2011); when that two-way
+matrix is not positive semi-definite the within-cell term is not subtracted, which is
+conservative, and the output flags it. A second specification replaces post with event-time bins, the five years
+before publication being the reference. Both estimators live in event_study.py.
 
 Importance is used two ways: in units of mean squared error (scaled by 1e4), and as a
 share of the year's total positive importance, which removes the level differences
@@ -44,9 +47,13 @@ A caveat that belongs with the table. Publication dates are staggered, so this i
 two-way fixed effects event study, and when the effect differs across publication
 cohorts the binned coefficients mix clean comparisons with comparisons that use
 already-published characteristics as controls (Goodman-Bacon 2021; Sun and Abraham
-2021). The table here is the first pass. A Sun-Abraham interaction-weighted version, or
-a stacked regression with one clean window per cohort, is the planned robustness check
-once the first results are in.
+2021). stage1_sunabraham.csv re-estimates every outcome with the Sun-Abraham
+interaction-weighted estimator: one set of bin dummies per publication cohort, the
+last-published characteristics as the control cohort (publication year at or after a
+cutoff; the sample stops at the cutoff year), and bin coefficients averaged over cohorts
+with each cohort's share of the bin. Characteristics published before the first test
+year have no untreated period and are dropped from that estimation. Two cutoffs are
+reported, since a later cutoff keeps more years and fewer controls.
 --------------------------------------------------------------------------------------
 """
 
@@ -60,59 +67,15 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from event_study import two_way_fe, sun_abraham
+
 HERE = Path(__file__).parent
 OUT = HERE / "output"
 CHARS_FILE = HERE / "jkp_characteristics.csv"
 
 BINS = [(-100, -6, "-10 to -6"), (-5, -1, "-5 to -1"), (0, 4, "0 to 4"), (5, 9, "5 to 9"), (10, 100, "10+")]
 REFERENCE = "-5 to -1"
-
-
-def two_way_fe(df, yvar, xvars, unit="characteristic", time="year"):
-    """OLS with unit and time dummies; covariance clustered by unit and by time
-    (Cameron, Gelbach and Miller 2011: V_unit + V_time - V_both)."""
-    d = df.dropna(subset=[yvar] + xvars).copy()
-    X = [d[xvars].to_numpy(float)]
-    for key in (unit, time):
-        dummies = pd.get_dummies(d[key], drop_first=(key == time)).to_numpy(float)
-        X.append(dummies)
-    X = np.hstack(X)
-    y = d[yvar].to_numpy(float)
-    assert np.isfinite(X).all() and np.isfinite(y).all(), "non-finite values in the regression inputs"
-    # numpy's matmul on macOS (Accelerate) raises spurious floating-point warnings on
-    # large products; the inputs are checked finite above, so they are silenced here
-    np.seterr(all="ignore")
-    XtX_inv = np.linalg.pinv(X.T @ X)
-    beta = XtX_inv @ (X.T @ y)
-    u = y - X @ beta
-    n, k = X.shape
-
-    def cluster_V(codes):
-        G = codes.max() + 1
-        meat = np.zeros((k, k))
-        S = X * u[:, None]
-        for g in range(G):
-            s = S[codes == g].sum(axis=0)
-            meat += np.outer(s, s)
-        return (G / (G - 1)) * ((n - 1) / (n - k)) * (XtX_inv @ meat @ XtX_inv)
-
-    cu = pd.factorize(d[unit])[0]
-    ct = pd.factorize(d[time])[0]
-    cb = pd.factorize(d[unit].astype(str) + "|" + d[time].astype(str))[0]
-    V = cluster_V(cu) + cluster_V(ct) - cluster_V(cb)
-    # the two-way sum is not positive semi-definite in general; here every unit-year cell
-    # holds one row, so the subtracted term is the heteroskedasticity-robust matrix and can
-    # exceed the sum on some diagonals. Cameron, Gelbach and Miller (2011, section 2.3)
-    # replace the negative eigenvalues with zero; neg_eig records how many were replaced.
-    w, Q = np.linalg.eigh((V + V.T) / 2)
-    neg_eig = int((w < 0).sum())
-    if neg_eig:
-        V = Q @ np.diag(np.maximum(w, 0)) @ Q.T
-    se = np.sqrt(np.maximum(np.diag(V)[:len(xvars)], 0))
-    return pd.DataFrame({"term": xvars, "coef": beta[:len(xvars)], "se": se,
-                         "t": beta[:len(xvars)] / np.where(se > 0, se, np.nan),
-                         "n": n, "clusters_unit": cu.max() + 1, "clusters_time": ct.max() + 1,
-                         "neg_eig": neg_eig})
+SA_CUTOFFS = [2016, 2018]        # control cohort: published in or after; the sample stops there
 
 
 def main():
@@ -201,6 +164,79 @@ def main():
     res = pd.concat(rows, ignore_index=True)
     res.to_csv(OUT / "stage1_eventtime.csv", index=False)
     print(res[["model", "outcome", "spec", "term", "coef", "se", "t", "n"]].round(4).to_string(index=False))
+
+    # the same outcomes with the Sun-Abraham estimator, two control cutoffs, and the
+    # pooled two-way FE bins on the same sample for a like-for-like comparison
+    sa_rows = []
+    panels_sa = [(model, g, ["imp_bp", "share"]) for model, g in imp.groupby("model")] + \
+                [(label, df, yvars) for label, df, yvars in extra]
+    for cutoff in SA_CUTOFFS:
+        for label, df, yvars in panels_sa:
+            for yvar in yvars:
+                for pooled in (False, True):
+                    try:
+                        r = sun_abraham(df.rename(columns={"characteristic": "unit", "pub_year": "cohort"})
+                                        .assign(time=lambda x: x["year"]),
+                                        yvar, BINS, REFERENCE, cutoff, pooled=pooled)
+                    except (AssertionError, ValueError, IndexError) as e:
+                        print(f"Sun-Abraham skipped for {label} {yvar} cutoff {cutoff}: {e}")
+                        continue
+                    meta = {"model": label, "outcome": yvar, "control_cutoff": cutoff,
+                            "estimator": "twfe_pooled" if pooled else "sun_abraham",
+                            "n_obs": r["n_obs"], "n_treated_units": r["n_treated_units"],
+                            "n_control_units": r["n_control_units"], "n_cohorts": r["n_cohorts"],
+                            "n_always_treated_dropped": r["n_always_treated_dropped"],
+                            "period_first": r["period_first"], "period_last": r["period_last"],
+                            "conservative_cov": r["conservative_cov"]}
+                    for b, row in r["bins"].iterrows():
+                        sa_rows.append(dict(meta, term=b, coef=row["coef"], se=row["se"], t=row["t"],
+                                            n_cohorts_in_bin=row["n_cohorts"], n_obs_in_bin=row["n_obs"]))
+                    sa_rows.append(dict(meta, term="post", coef=r["post"]["coef"], se=r["post"]["se"],
+                                        t=r["post"]["t"], n_obs_in_bin=r["post"]["n_obs"],
+                                        wald_pre_stat=r["pre_wald"]["stat"], wald_pre_df=r["pre_wald"]["df"],
+                                        wald_pre_p=r["pre_wald"]["p"]))
+                    if pooled:
+                        # the first-pass regression, a single post dummy, on the same sample:
+                        # test years before the cutoff, without the characteristics that
+                        # were already public in the first test year
+                        sub = df[df["year"] < cutoff]
+                        first_e = sub.groupby("characteristic")["event_time"].min()
+                        sub = sub[~sub["characteristic"].isin(first_e[first_e >= 0].index)]
+                        st = two_way_fe(sub, yvar, ["post"]).iloc[0]
+                        sa_rows.append(dict(meta, estimator="twfe_static", term="post", coef=st["coef"],
+                                            se=st["se"], t=st["t"], n_obs_in_bin=int(st["n"]),
+                                            conservative_cov=int(st["conservative_cov"])))
+    sa = pd.DataFrame(sa_rows)
+    sa.to_csv(OUT / "stage1_sunabraham.csv", index=False)
+    show = sa[(sa["term"] == "post")][["model", "outcome", "control_cutoff", "estimator", "coef", "se", "t",
+                                        "n_treated_units", "n_control_units", "period_last", "wald_pre_p"]]
+    print("\nSun-Abraham, the post average over cohorts and bins:")
+    print(show.round(4).to_string(index=False))
+
+    # figure: Huber importance share, two-way FE bins against Sun-Abraham, main cutoff
+    sub = sa[(sa["model"] == "huber") & (sa["outcome"] == "share") & (sa["control_cutoff"] == SA_CUTOFFS[0])]
+    if len(sub):
+        names = [n for _, _, n in BINS]
+        xpos = {n: i for i, n in enumerate(names)}
+        fig, ax = plt.subplots(figsize=(7, 4))
+        for k, (est, lab, color) in enumerate([("twfe_pooled", "two-way fixed effects", "#777777"),
+                                               ("sun_abraham", "Sun-Abraham", "#1f77b4")]):
+            g = sub[(sub["estimator"] == est) & (sub["term"] != "post")].set_index("term")
+            xs = [xpos[REFERENCE]] + [xpos[t] for t in g.index]
+            ys = [0.0] + g["coef"].tolist()
+            es = [0.0] + (1.96 * g["se"]).tolist()
+            order = np.argsort(xs)
+            ax.errorbar(np.array(xs)[order] + 0.08 * k, np.array(ys)[order], yerr=np.array(es)[order],
+                        marker="o", capsize=3, lw=1.3, color=color, label=lab)
+        ax.axhline(0, color="black", lw=0.8); ax.axvline(xpos[REFERENCE] + 0.5, color="grey", lw=0.8, ls="--")
+        ax.set_xticks(range(len(names))); ax.set_xticklabels(names)
+        ax.set_xlabel("years since publication (reference: -5 to -1)")
+        ax.set_ylabel("change in importance share, percentage points")
+        r0 = sub.iloc[0]
+        ax.set_title(f"Huber model, importance share\ncontrol cohort published {SA_CUTOFFS[0]} or later, "
+                     f"test years to {int(r0['period_last'])}", loc="left", fontsize=10)
+        ax.legend(frameon=False); ax.spines[["top", "right"]].set_visible(False); ax.grid(alpha=0.25)
+        fig.tight_layout(); fig.savefig(OUT / "fig07_sunabraham.png", dpi=160)
 
     # figure: the decomposition for the Huber model, three panels of binned coefficients
     panels = [("huber", "share", "importance share, pp"), ("huber_beta", "log_abs_beta", "log |slope|"),
