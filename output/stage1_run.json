@@ -1,0 +1,62 @@
+{
+ "run_id": "20261005-010838-8084b01",
+ "commit": "8084b01",
+ "started": "2026-10-05 01:08:38",
+ "panel": "jkp",
+ "flags": {
+  "synthetic": false,
+  "smoke": false,
+  "timing": false,
+  "eval_only": false,
+  "skip_done": false,
+  "rebuild_panel": false,
+  "every": 2,
+  "first_test": 1995,
+  "last_test": 2024,
+  "models": [
+   "huber",
+   "enet",
+   "pcr",
+   "pls",
+   "gbrt",
+   "nn1",
+   "nn2",
+   "nn3"
+  ],
+  "importance_models": [
+   "huber",
+   "gbrt",
+   "nn3"
+  ],
+  "device": "cpu",
+  "y_check": false,
+  "robust": true,
+  "crsp_only": true
+ },
+ "test_years": [
+  1995,
+  1997,
+  1999,
+  2001,
+  2003,
+  2005,
+  2007,
+  2009,
+  2011,
+  2013,
+  2015,
+  2017,
+  2019,
+  2021,
+  2023
+ ],
+ "python": "3.9.6",
+ "numpy": "2.0.2",
+ "pandas": "2.2.3",
+ "continued": [
+  "2026-10-05 14:55:13 refit gbrt",
+  "2026-10-05 15:03:44 refit gbrt",
+  "2026-10-05 15:34:46 refit huber,gbrth",
+  "2026-10-05 16:02:54"
+ ]
+}
