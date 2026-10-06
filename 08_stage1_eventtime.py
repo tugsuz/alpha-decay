@@ -24,7 +24,9 @@ Characteristic fixed effects a_c absorb how useful a characteristic is on averag
 fixed effects d_y absorb anything that moves all importances in a year, including the
 calendar-time decline the paper worries about. b is identified from the characteristics
 whose publication falls inside the test window. Standard errors are clustered two ways,
-by characteristic and by year. A second specification replaces post with event-time
+by characteristic and by year; the two-way matrix is made positive semi-definite by
+setting its negative eigenvalues to zero (Cameron, Gelbach and Miller 2011), and the
+output records how many were set. A second specification replaces post with event-time
 bins, the five years before publication being the reference.
 
 Importance is used two ways: in units of mean squared error (scaled by 1e4), and as a
@@ -98,10 +100,19 @@ def two_way_fe(df, yvar, xvars, unit="characteristic", time="year"):
     ct = pd.factorize(d[time])[0]
     cb = pd.factorize(d[unit].astype(str) + "|" + d[time].astype(str))[0]
     V = cluster_V(cu) + cluster_V(ct) - cluster_V(cb)
+    # the two-way sum is not positive semi-definite in general; here every unit-year cell
+    # holds one row, so the subtracted term is the heteroskedasticity-robust matrix and can
+    # exceed the sum on some diagonals. Cameron, Gelbach and Miller (2011, section 2.3)
+    # replace the negative eigenvalues with zero; neg_eig records how many were replaced.
+    w, Q = np.linalg.eigh((V + V.T) / 2)
+    neg_eig = int((w < 0).sum())
+    if neg_eig:
+        V = Q @ np.diag(np.maximum(w, 0)) @ Q.T
     se = np.sqrt(np.maximum(np.diag(V)[:len(xvars)], 0))
     return pd.DataFrame({"term": xvars, "coef": beta[:len(xvars)], "se": se,
                          "t": beta[:len(xvars)] / np.where(se > 0, se, np.nan),
-                         "n": n, "clusters_unit": cu.max() + 1, "clusters_time": ct.max() + 1})
+                         "n": n, "clusters_unit": cu.max() + 1, "clusters_time": ct.max() + 1,
+                         "neg_eig": neg_eig})
 
 
 def main():
