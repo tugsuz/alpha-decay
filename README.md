@@ -48,6 +48,27 @@ volatility.
 
 ![return against time since publication](output/fig05_decay.png)
 
+**Stock-level forecasts with and without look-ahead.** The same question on individual
+stocks, on the Jensen, Kelly and Pedersen US panel with 153 published characteristics as
+features and test years 1995 to 2024. Every model (Huber regression, elastic net, PCR,
+PLS, boosted trees with two losses, networks with one to three layers) is fitted twice:
+on the characteristics whose paper had appeared before the test year, and on all of them,
+which is the usual setup and contains look-ahead. The full set is ahead of the public set
+in every model, every row set and every portfolio: by 0.03 to 0.19 points of out-of-sample
+R² on all rows (about 0.12 on average), by about 0.01 of rank IC, and in the value-weighted
+Huber book by a net Sharpe ratio of 0.70 against 0.36. Costs are half the CRSP closing
+quoted spread, with Corwin-Schultz as the fallback; the two medians differ by a factor of
+ten for mega caps, and the choice decides whether the linear books survive costs. The
+equal-weighted books earn gross Sharpe ratios of up to 3.4 by putting most of their
+trading in micro and nano caps, and net 0.1 to 0.8. In event time around each characteristic's
+publication, the linear model leans more on a characteristic after its paper appears
+(t = 2.4), while the characteristic's own correlation with next month's return does not
+change (t = 0.4); the trees and the network show no detectable change. Two design decisions
+(dropping rows without a CRSP return, and the cost series) were made from diagnostics
+before any model was scored, and the paper says so.
+
+![Huber model around publication](output/fig07_decomposition.png)
+
 ## Data
 
 Two public files from the Chen and Zimmermann Open Source Asset Pricing dataset
@@ -75,9 +96,10 @@ python 02_decay_panel.py        # three-window decay, panel regression; about a 
 python 05_ml_panel.py           # the forecasting section; about ten minutes
 python 05_ml_panel.py figures   # redraw its figures from the saved outputs
 
-python 06_jkp_pull.py --check   # Stage 1: columns and a one-month profile of the JKP panel (WRDS)
+python 06_jkp_pull.py --check   # stock level: columns and a one-month profile of the JKP panel (WRDS)
 python 06_jkp_pull.py           # the US stock-month panel, one parquet a year
-python 07_stage1_models.py      # stock-level forecasts, public against full information sets
+python 09_spreads.py            # monthly closing quoted spreads from the CRSP daily file (WRDS)
+python 07_stage1_models.py --robust --crsp-only   # stock-level forecasts, public against full; about a day
 python 08_stage1_eventtime.py   # what the model uses, in event time around publication
 
 python 03_crsp_pull.py          # CRSP monthly panel from WRDS, by decade, restartable
@@ -90,16 +112,20 @@ python 04_build_anomalies.py    # rebuild Size and Mom12m, score them against Ch
 first thing to run after a new data release; `01_first_figure.py figure` plots one
 anomaly with its publication date marked.
 
-Needs Python 3 with pandas, numpy, matplotlib and scikit-learn. The CRSP scripts also
-need the `wrds` package and a WRDS account; the username is read from the `WRDS_USERNAME`
+Needs Python 3 with pandas, numpy, matplotlib and scikit-learn; the stock-level scripts
+also need pyarrow, lightgbm and torch. The WRDS scripts need the `wrds` package and a WRDS
+account; the username is read from the `WRDS_USERNAME`
 environment variable (`06_jkp_pull.py` stops with a message if it is unset, `03_crsp_pull.py`
 prompts), the password from `~/.pgpass`, and no credential is written to any file here. The paper needs Quarto with
 Jupyter, and a TeX installation for the PDF. `quarto render paper/alpha-decay.qmd
 --profile course` renders the paper without the forecasting section.
 
 Outputs in `output/` that the paper reads are committed: the three-window table, the
-rebuild comparisons and the forecasting results, so the page can be rebuilt without a
-WRDS subscription and without refitting the models.
+rebuild comparisons and the forecasting results of both panels, so the page can be rebuilt
+without a WRDS subscription and without refitting the models. Every committed stock-level
+file is an aggregate (R² and IC by model and year, portfolio returns by month, spreads by
+size group, importance by characteristic and year); the stock-month forecasts stay in
+`data/`, which is not committed.
 
 ## Method notes
 
@@ -110,7 +136,10 @@ post-publication decline a lower bound if traders act on working papers. The
 cluster-robust covariance is written out in numpy. In the forecasting section a signal
 enters only in years after its publication year, hyperparameters are chosen on the last
 eight years of each training sample, and every setting tried is in
-`output/ml_tuning.csv`.
+`output/ml_tuning.csv`. In the stock-level section the fitting target is clipped at the
+0.1 and 99.9 percentiles of the training returns and only rows with a CRSP return enter,
+a decision made from `output/stage1_target.csv` before any model was scored; forecasts are
+scored on raw returns and the R² is reported on three row sets.
 
 ## License
 
@@ -125,6 +154,9 @@ Chen, A. Y. and T. Zimmermann (2022), "Open Source Cross-Sectional Asset Pricing
 
 Gu, S., B. Kelly and D. Xiu (2020), "Empirical Asset Pricing via Machine Learning",
 *Review of Financial Studies* 33(5), 2223-2273.
+
+Jensen, T. I., B. Kelly and L. H. Pedersen (2023), "Is There a Replication Crisis in
+Finance?", *Journal of Finance* 78(5), 2465-2518.
 
 McLean, R. D. and J. Pontiff (2016), "Does Academic Research Destroy Stock Return
 Predictability?", *Journal of Finance* 71(1), 5-32.
